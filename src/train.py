@@ -73,7 +73,33 @@ class TypoDataset(Dataset):
         return len(self.examples)
     
     def __getitem__(self, idx):
-        return self.examples[idx]
+        item = self.examples[idx]
+        corrupted = item['corrupted']
+        clean     = item['clean']
+
+        # 1. Tokenise both
+        corrupted_enc = self.tokenizer(corrupted, truncation=True,
+                                    padding='max_length',
+                                    max_length=self.max_length,
+                                    return_tensors='pt')
+        clean_enc = self.tokenizer(clean, truncation=True,
+                                padding='max_length',
+                                max_length=self.max_length,
+                                return_tensors='pt')
+
+        # 2. Build a mask where the two sequences differ
+        input_ids   = corrupted_enc['input_ids'].squeeze()
+        labels      = clean_enc['input_ids'].squeeze()
+        mask        = input_ids != labels
+
+        # 3. Only the differing positions are targets
+        labels[~mask] = -100   # ignore in loss
+
+        return {
+            'input_ids': input_ids,
+            'attention_mask': corrupted_enc['attention_mask'].squeeze(),
+            'labels': labels
+        }
 
 def freeze_model_layers(model, freeze_embeddings: bool = True,
                         freeze_transformer: bool = True,
