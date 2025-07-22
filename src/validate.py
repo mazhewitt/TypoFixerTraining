@@ -34,7 +34,7 @@ class TypoValidator:
         logger.info(f"Model loaded on {self.device}")
     
     def predict_tokens(self, corrupted_text: str, max_length: int = 128) -> str:
-        """Predict corrected text using the trained model."""
+        """Predict corrected text using MLM approach - mask potential typos and predict."""
         # Tokenize input
         inputs = self.tokenizer(
             corrupted_text,
@@ -46,13 +46,39 @@ class TypoValidator:
         
         input_ids = inputs['input_ids'].to(self.device)
         attention_mask = inputs['attention_mask'].to(self.device)
+        original_ids = input_ids.clone()
         
+        # Create a simple heuristic to identify potential typo positions
+        # We'll mask tokens that might be typos and let the model predict them
+        corrected_ids = input_ids.clone()
+        
+        # Strategy: Compare each token with common words and mask suspicious ones
         with torch.no_grad():
-            outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-            predictions = torch.argmax(outputs.logits, dim=-1)
-            
-        # Decode predictions
-        predicted_text = self.tokenizer.decode(predictions[0], skip_special_tokens=True)
+            # For each position, try masking it and see if model predicts something different
+            for pos in range(1, input_ids.shape[1] - 1):  # Skip CLS and SEP tokens
+                if attention_mask[0, pos] == 0:  # Skip padding
+                    break
+                
+                # Create masked version
+                masked_ids = input_ids.clone()
+                masked_ids[0, pos] = self.tokenizer.mask_token_id
+                
+                # Get prediction for this position
+                outputs = self.model(input_ids=masked_ids, attention_mask=attention_mask)
+                predicted_token_id = torch.argmax(outputs.logits[0, pos], dim=-1)
+                
+                # If prediction is different and seems more reasonable, use it
+                original_token = self.tokenizer.decode([input_ids[0, pos].item()], skip_special_tokens=True)
+                predicted_token = self.tokenizer.decode([predicted_token_id.item()], skip_special_tokens=True)
+                
+                # Simple heuristic: if predicted token is different and longer than 2 chars, consider it
+                if (predicted_token_id != input_ids[0, pos] and 
+                    len(predicted_token.strip()) >= 2 and
+                    predicted_token.strip().isalpha()):
+                    corrected_ids[0, pos] = predicted_token_id
+        
+        # Decode the corrected sequence
+        predicted_text = self.tokenizer.decode(corrected_ids[0], skip_special_tokens=True)
         return predicted_text.strip()
     
     def calculate_token_accuracy(self, corrupted_texts: List[str], clean_texts: List[str], 
