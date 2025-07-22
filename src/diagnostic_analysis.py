@@ -46,6 +46,7 @@ class TypoErrorAnalyzer:
             'homophone': defaultdict(int),             # there/their/they're
             'real_word': defaultdict(int),             # affect/effect
             'capitalization': defaultdict(int),        # thi -> This
+            'unknown': defaultdict(int),               # unclassified errors
         }
         
         # Success/failure tracking
