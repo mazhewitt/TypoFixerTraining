@@ -61,11 +61,13 @@ class TypoDataset(Dataset):
                     return_tensors='pt'
                 )
                 
-                self.examples.append({
-                    'input_ids': corrupted_tokens['input_ids'].squeeze(),
-                    'attention_mask': corrupted_tokens['attention_mask'].squeeze(),
-                    'labels': clean_tokens['input_ids'].squeeze(),
-                })
+        self.examples.append({
+            'corrupted': data['corrupted'],
+            'clean': data['clean'],
+            'input_ids': corrupted_tokens['input_ids'].squeeze(),
+            'attention_mask': corrupted_tokens['attention_mask'].squeeze(),
+            'labels': clean_tokens['input_ids'].squeeze(),
+        })
         
         logger.info(f"Loaded {len(self.examples)} examples")
     
