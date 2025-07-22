@@ -121,7 +121,7 @@ class ModelTweaker:
             adam_epsilon=1e-6,
             
             # Evaluation
-            evaluation_strategy="steps",
+            eval_strategy="steps",
             eval_steps=500,
             save_steps=1000,
             save_total_limit=3,
