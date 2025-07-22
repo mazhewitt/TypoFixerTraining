@@ -112,97 +112,157 @@ class TypoTrainer(Trainer):
         return (loss, outputs) if return_outputs else loss
 
 def main():
-    parser = argparse.ArgumentParser(description="Train DistilBERT typo correction model")
+    parser = argparse.ArgumentParser(description="Fine-tune DistilBERT for typo correction")
     parser.add_argument('--model_name', type=str, default='distilbert-base-uncased',
-                       help='Base model name or path')
+                       help='Pretrained model name')
     parser.add_argument('--train_file', type=str, required=True,
-                       help='Path to training JSONL file')
-    parser.add_argument('--validation_file', type=str, default=None,
-                       help='Path to validation JSONL file')
+                       help='Training JSONL file')
+    parser.add_argument('--validation_file', type=str,
+                       help='Validation JSONL file (optional)')
     parser.add_argument('--output_dir', type=str, required=True,
-                       help='Output directory for model checkpoints')
-    parser.add_argument('--max_seq_len', type=int, default=64,
-                       help='Maximum sequence length')
-    parser.add_argument('--per_device_batch_size', type=int, default=32,
-                       help='Batch size per device')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
-                       help='Gradient accumulation steps')
+                       help='Output directory for trained model')
+    parser.add_argument('--max_seq_len', type=int, default=128,
+                       help='Maximum sequence length (128 for ANE compatibility)')
+    parser.add_argument('--per_device_train_batch_size', type=int, default=32,
+                       help='Per device training batch size')
+    parser.add_argument('--per_device_eval_batch_size', type=int, default=32,
+                       help='Per device evaluation batch size')
     parser.add_argument('--learning_rate', type=float, default=2e-5,
                        help='Learning rate')
     parser.add_argument('--num_train_epochs', type=int, default=3,
                        help='Number of training epochs')
-    parser.add_argument('--warmup_steps', type=int, default=500,
-                       help='Number of warmup steps')
     parser.add_argument('--save_steps', type=int, default=5000,
                        help='Save checkpoint every N steps')
-    parser.add_argument('--eval_steps', type=int, default=5000,
-                       help='Evaluation every N steps')
-    parser.add_argument('--logging_steps', type=int, default=100,
-                       help='Logging every N steps')
+    parser.add_argument('--logging_steps', type=int, default=500,
+                       help='Log every N steps')
+    parser.add_argument('--eval_steps', type=int, default=2000,
+                       help='Evaluate every N steps (if validation file provided)')
+    parser.add_argument('--warmup_ratio', type=float, default=0.1,
+                       help='Warmup ratio')
+    parser.add_argument('--weight_decay', type=float, default=0.01,
+                       help='Weight decay')
     parser.add_argument('--seed', type=int, default=42,
                        help='Random seed')
+    parser.add_argument('--save_total_limit', type=int, default=3,
+                       help='Maximum number of checkpoints to keep')
+    parser.add_argument('--load_best_model_at_end', action='store_true',
+                       help='Load best model at end of training')
+    parser.add_argument('--metric_for_best_model', type=str, default='eval_loss',
+                       help='Metric to use for best model selection')
+    parser.add_argument('--greater_is_better', action='store_true',
+                       help='Whether higher metric is better')
+    parser.add_argument('--report_to', type=str, default=None,
+                       help='Experiment tracking (wandb, tensorboard, etc.)')
+    parser.add_argument('--run_name', type=str,
+                       help='Experiment run name')
     parser.add_argument('--local_rank', type=int, default=-1,
                        help='Local rank for distributed training')
     
     args = parser.parse_args()
     
-    # Set random seed
+    # Set seed for reproducibility
     set_seed(args.seed)
     
     # Setup distributed training
     if args.local_rank != -1:
         torch.distributed.init_process_group(backend='nccl')
         torch.cuda.set_device(args.local_rank)
-        device = torch.device('cuda', args.local_rank)
-    else:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Setup logging with run info
+    run_name = args.run_name or f"typo-fixer-{args.num_train_epochs}ep"
+    
+    logger.info("🚀 Starting DistilBERT typo correction training...")
+    logger.info(f"📁 Output directory: {args.output_dir}")
+    logger.info(f"📊 Run name: {run_name}")
+    logger.info(f"🔄 Epochs: {args.num_train_epochs}")
+    logger.info(f"📚 Training file: {args.train_file}")
+    if args.validation_file:
+        logger.info(f"✅ Validation file: {args.validation_file}")
+    
+    logger.info(f"Loading tokenizer and model: {args.model_name}")
     
     # Load tokenizer and model
-    logger.info(f"Loading model: {args.model_name}")
     tokenizer = DistilBertTokenizer.from_pretrained(args.model_name)
     model = DistilBertForMaskedLM.from_pretrained(args.model_name)
     
-    # Freeze layers except MLM head
+    # Freeze model layers except MLM head
     model = freeze_model_layers(model)
     
+    # Count trainable parameters
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    
+    logger.info(f"🔧 Model parameters: {total_params:,} total, {trainable_params:,} trainable")
+    logger.info(f"🎯 Training efficiency: {100*trainable_params/total_params:.1f}% of parameters trainable")
+    
     # Load datasets
+    logger.info(f"📖 Loading training data from {args.train_file}")
     train_dataset = TypoDataset(args.train_file, tokenizer, args.max_seq_len)
     
     eval_dataset = None
     if args.validation_file:
+        logger.info(f"📖 Loading validation data from {args.validation_file}")
         eval_dataset = TypoDataset(args.validation_file, tokenizer, args.max_seq_len)
+    
+    logger.info(f"📊 Training dataset size: {len(train_dataset):,}")
+    if eval_dataset:
+        logger.info(f"📊 Validation dataset size: {len(eval_dataset):,}")
     
     # Data collator for MLM
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=True,
-        mlm_probability=0.15  # Mask 15% of tokens during training
+        mlm_probability=0.15  # Standard MLM masking
     )
+    
+    # Determine evaluation strategy
+    eval_strategy = "steps" if eval_dataset else "no"
     
     # Training arguments
     training_args = TrainingArguments(
+        # Output and logging
         output_dir=args.output_dir,
         overwrite_output_dir=True,
-        num_train_epochs=args.num_train_epochs,
-        per_device_train_batch_size=args.per_device_batch_size,
-        per_device_eval_batch_size=args.per_device_batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        learning_rate=args.learning_rate,
-        weight_decay=0.01,
-        warmup_steps=args.warmup_steps,
+        logging_dir=f"{args.output_dir}/logs",
         logging_steps=args.logging_steps,
-        save_steps=args.save_steps,
+        run_name=run_name,
+        
+        # Training parameters
+        num_train_epochs=args.num_train_epochs,
+        per_device_train_batch_size=args.per_device_train_batch_size,
+        per_device_eval_batch_size=args.per_device_eval_batch_size,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
+        
+        # Evaluation
+        eval_strategy=eval_strategy,
         eval_steps=args.eval_steps if eval_dataset else None,
-        eval_strategy="steps" if eval_dataset else "no",
-        save_total_limit=3,
-        prediction_loss_only=False,
-        dataloader_num_workers=4,
+        save_strategy="steps",
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
+        load_best_model_at_end=args.load_best_model_at_end,
+        metric_for_best_model=args.metric_for_best_model,
+        greater_is_better=args.greater_is_better,
+        
+        # Performance optimizations
+        fp16=torch.cuda.is_available(),  # Mixed precision on GPU
+        dataloader_pin_memory=True,
+        dataloader_num_workers=4,  # Parallel data loading
+        remove_unused_columns=False,  # Important for custom dataset
+        
+        # Experiment tracking
+        report_to=[args.report_to] if args.report_to else [],
+        
+        # Distributed training
         local_rank=args.local_rank,
-        report_to=None,  # Disable wandb/tensorboard
+        
+        # Prediction and evaluation
+        prediction_loss_only=True,  # Only compute loss for faster evaluation
         seed=args.seed,
     )
     
-    # Initialize trainer
+    # Create trainer
     trainer = TypoTrainer(
         model=model,
         args=training_args,
@@ -212,28 +272,104 @@ def main():
         tokenizer=tokenizer,
     )
     
+    # Print training plan
+    total_steps = len(train_dataset) // args.per_device_train_batch_size * args.num_train_epochs
+    logger.info(f"\n📋 Training Plan:")
+    logger.info(f"   Total steps: {total_steps:,}")
+    logger.info(f"   Steps per epoch: {len(train_dataset) // args.per_device_train_batch_size:,}")
+    logger.info(f"   Logging every: {args.logging_steps} steps")
+    logger.info(f"   Saving every: {args.save_steps} steps")
+    if eval_dataset:
+        logger.info(f"   Evaluating every: {args.eval_steps} steps")
+    
+    # Estimate training time
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        logger.info(f"🚀 Training on GPU: {gpu_name}")
+        if "RTX 4090" in gpu_name:
+            estimated_time = total_steps * 0.05 / 60  # ~50ms per step estimate
+        elif "A100" in gpu_name:
+            estimated_time = total_steps * 0.03 / 60  # ~30ms per step estimate
+        else:
+            estimated_time = total_steps * 0.1 / 60   # Conservative estimate
+        logger.info(f"⏱️ Estimated training time: {estimated_time:.1f} minutes")
+    else:
+        logger.info("💻 Training on CPU (will be slower)")
+    
     # Start training
-    logger.info("Starting training...")
-    trainer.train()
+    logger.info("\n🚀 Starting training...")
+    import time
+    start_time = time.time()
     
-    # Save final model
-    logger.info(f"Saving final model to {args.output_dir}")
-    trainer.save_model()
-    tokenizer.save_pretrained(args.output_dir)
-    
-    # Save training info
-    info = {
-        "model_name": args.model_name,
-        "max_seq_len": args.max_seq_len,
-        "num_epochs": args.num_train_epochs,
-        "learning_rate": args.learning_rate,
-        "train_samples": len(train_dataset),
-    }
-    
-    with open(os.path.join(args.output_dir, "training_info.json"), 'w') as f:
-        json.dump(info, f, indent=2)
-    
-    logger.info("Training completed!")
+    try:
+        trainer.train()
+        
+        training_time = time.time() - start_time
+        logger.info(f"✅ Training completed in {training_time/60:.1f} minutes")
+        
+        # Save final model
+        logger.info(f"💾 Saving model to {args.output_dir}")
+        trainer.save_model()
+        tokenizer.save_pretrained(args.output_dir)
+        
+        # Get final metrics
+        final_loss = "N/A"
+        final_eval_loss = "N/A"
+        
+        if trainer.state.log_history:
+            # Find last training loss
+            for log_entry in reversed(trainer.state.log_history):
+                if "train_loss" in log_entry:
+                    final_loss = log_entry["train_loss"]
+                    break
+            
+            # Find last evaluation loss
+            if eval_dataset:
+                for log_entry in reversed(trainer.state.log_history):
+                    if "eval_loss" in log_entry:
+                        final_eval_loss = log_entry["eval_loss"]
+                        break
+        
+        # Save comprehensive training info
+        training_info = {
+            "model_name": args.model_name,
+            "training_time_minutes": training_time / 60,
+            "total_parameters": total_params,
+            "trainable_parameters": trainable_params,
+            "training_examples": len(train_dataset),
+            "validation_examples": len(eval_dataset) if eval_dataset else 0,
+            "epochs": args.num_train_epochs,
+            "batch_size": args.per_device_train_batch_size,
+            "learning_rate": args.learning_rate,
+            "max_seq_len": args.max_seq_len,
+            "final_train_loss": final_loss,
+            "final_eval_loss": final_eval_loss,
+            "total_steps": total_steps,
+            "run_name": run_name,
+            "gpu_used": torch.cuda.is_available(),
+            "device_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU",
+        }
+        
+        with open(f"{args.output_dir}/training_info.json", 'w') as f:
+            json.dump(training_info, f, indent=2)
+        
+        logger.info("\n🎉 Training completed successfully!")
+        logger.info(f"📁 Model saved to: {args.output_dir}")
+        logger.info(f"📊 Final training loss: {final_loss}")
+        if eval_dataset:
+            logger.info(f"📊 Final validation loss: {final_eval_loss}")
+        logger.info(f"⏱️ Training time: {training_time/60:.1f} minutes")
+        
+        # Next steps guidance
+        if len(train_dataset) >= 50000:
+            logger.info(f"\n📋 Next steps:")
+            logger.info(f"   1. Validate accuracy with: python src/validate.py --model_dir {args.output_dir}")
+            logger.info(f"   2. Upload to HF Hub: huggingface-cli upload {args.output_dir} username/model-name")
+            logger.info(f"   3. Convert to ANE: python src/apple_ane_conversion.py --input_model {args.output_dir}")
+        
+    except Exception as e:
+        logger.error(f"❌ Training failed: {e}")
+        raise
 
 if __name__ == "__main__":
     main()

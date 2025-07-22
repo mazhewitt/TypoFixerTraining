@@ -375,61 +375,158 @@ def process_sentences_from_files(input_files: List[Path], output_file: Path,
                 f.write(json.dumps(data) + '\n')
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate synthetic typo training data")
-    parser.add_argument('--source', type=str, choices=['opensubtitles', 'files'], 
-                       default='opensubtitles', help='Data source: opensubtitles dataset or local files')
-    parser.add_argument('--input', type=str, 
-                       help='Input directory containing text files (for --source files)')
-    parser.add_argument('--output', type=str, required=True,
+    parser = argparse.ArgumentParser(description="Generate synthetic typo data for training")
+    parser.add_argument('--output', type=str, default='data/processed/train.jsonl',
                        help='Output JSONL file path')
-    parser.add_argument('--dataset_split', type=str, default='train[:2%]',
-                       help='Dataset split to use for OpenSubtitles (e.g., train[:2%], train[:100000])')
-    parser.add_argument('--max_sentences', type=int, default=2_000_000,
-                       help='Maximum number of sentences to process')
+    parser.add_argument('--num_examples', type=int, default=1000,
+                       help='Number of examples to generate (default: 1000, use 100000+ for production)')
     parser.add_argument('--corruption_rate', type=float, default=0.15,
-                       help='Fraction of words to corrupt')
-    parser.add_argument('--validation_split', type=float, default=0.002,
-                       help='Fraction of data to hold out for validation')
+                       help='Rate of token corruption (0.0-1.0)')
+    parser.add_argument('--dataset', type=str, default='wikitext',
+                       choices=['wikitext', 'opensubtitles'], 
+                       help='Source dataset to use')
+    parser.add_argument('--max_length', type=int, default=128,
+                       help='Maximum sentence length in characters')
+    parser.add_argument('--min_length', type=int, default=10,
+                       help='Minimum sentence length in characters')
     
     args = parser.parse_args()
     
-    output_file = Path(args.output)
+    # Create output directory
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    if args.source == 'opensubtitles':
-        # Use available English text dataset
-        print(f"Using English text dataset: {args.dataset_split}")
-        process_sentences_from_dataset(
-            output_file, 
-            args.dataset_split, 
-            args.max_sentences, 
-            args.corruption_rate
-        )
+    print(f"🚀 Generating synthetic typo data...")
+    print(f"📁 Output file: {args.output}")
+    print(f"📊 Target examples: {args.num_examples:,}")
+    print(f"🔀 Corruption rate: {args.corruption_rate}")
+    print(f"📚 Source dataset: {args.dataset}")
     
-    elif args.source == 'files':
-        # Use local text files
-        if not args.input:
-            print("Error: --input required when using --source files")
-            return
+    try:
+        # Load dataset based on user choice
+        if args.dataset == 'wikitext':
+            print("Loading WikiText dataset...")
+            dataset = load_dataset("wikitext", "wikitext-103-raw-v1", split="train", streaming=True)
+            text_key = 'text'
+        else:
+            print("Loading OpenSubtitles dataset...")
+            try:
+                dataset = load_dataset("open_subtitles", lang1="en", split="train", streaming=True)
+                text_key = 'translation'  # OpenSubtitles uses this key
+            except Exception as e:
+                print(f"⚠️ OpenSubtitles failed ({e}), falling back to WikiText...")
+                dataset = load_dataset("wikitext", "wikitext-103-raw-v1", split="train", streaming=True)
+                text_key = 'text'
         
-        input_dir = Path(args.input)
-        text_files = list(input_dir.glob('*.txt')) + list(input_dir.glob('*.tsv'))
+        generated_count = 0
+        processed_count = 0
+        skipped_count = 0
         
-        if not text_files:
-            print(f"No .txt or .tsv files found in {input_dir}")
-            return
+        # Progress tracking for large datasets
+        progress_interval = max(1, args.num_examples // 100)  # Update every 1%
         
-        print(f"Found {len(text_files)} input files")
-        process_sentences_from_files(text_files, output_file, args.max_sentences, args.corruption_rate)
+        with open(args.output, 'w', encoding='utf-8') as f:
+            for example in tqdm(dataset, desc="Processing examples", unit="docs"):
+                if generated_count >= args.num_examples:
+                    break
+                
+                processed_count += 1
+                
+                # Extract text based on dataset format
+                if text_key == 'translation':
+                    # OpenSubtitles format
+                    if 'en' in example[text_key]:
+                        text = example[text_key]['en'].strip()
+                    else:
+                        skipped_count += 1
+                        continue
+                else:
+                    # WikiText format
+                    text = example[text_key].strip()
+                
+                # Skip empty lines, very short lines, or headers
+                if len(text) < args.min_length or text.startswith('=') or not text.strip():
+                    skipped_count += 1
+                    continue
+                
+                # Process sentences (split on periods, exclamation marks, question marks)
+                sentences = re.split(r'[.!?]+', text)
+                
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    
+                    # Skip short or empty sentences
+                    if len(sentence) < args.min_length or len(sentence) > args.max_length:
+                        continue
+                    
+                    # Require minimum number of words
+                    if len(sentence.split()) < 3:
+                        continue
+                    
+                    # Skip sentences with too many special characters
+                    if len(re.findall(r'[^a-zA-Z0-9\s\'\-]', sentence)) > len(sentence) * 0.1:
+                        continue
+                    
+                    # Generate corrupted version
+                    corrupted = corrupt_sentence(sentence, args.corruption_rate)
+                    
+                    # Skip if no corruption occurred
+                    if corrupted == sentence:
+                        continue
+                    
+                    # Create training example
+                    example_data = {
+                        'corrupted': corrupted,
+                        'clean': sentence
+                    }
+                    
+                    f.write(json.dumps(example_data, ensure_ascii=False) + '\n')
+                    generated_count += 1
+                    
+                    # Progress reporting for large datasets
+                    if generated_count % progress_interval == 0:
+                        print(f"  Generated: {generated_count:,}/{args.num_examples:,} examples "
+                              f"({100*generated_count/args.num_examples:.1f}%)")
+                    
+                    if generated_count >= args.num_examples:
+                        break
+                
+                # Early termination for testing with small datasets
+                if args.num_examples <= 10000 and processed_count > args.num_examples * 5:
+                    print(f"⚠️ Processed {processed_count:,} documents, stopping early to avoid infinite loop")
+                    break
+        
+        print(f"\n✅ Data generation completed!")
+        print(f"📊 Generated: {generated_count:,} training examples")
+        print(f"📚 Processed: {processed_count:,} documents")
+        print(f"⏭️ Skipped: {skipped_count:,} documents")
+        print(f"📁 Saved to: {args.output}")
+        print(f"💾 File size: {output_path.stat().st_size / 1024 / 1024:.1f} MB")
+        
+        # Show sample examples
+        print(f"\n📝 Sample examples:")
+        with open(args.output, 'r', encoding='utf-8') as f:
+            for i, line in enumerate(f):
+                if i >= 5:  # Show first 5 examples
+                    break
+                data = json.loads(line.strip())
+                print(f"  {i+1}. '{data['corrupted']}' → '{data['clean']}'")
+                
+        # Provide usage recommendations
+        if generated_count < args.num_examples:
+            print(f"\n⚠️ Warning: Only generated {generated_count:,} examples (requested {args.num_examples:,})")
+            print(f"💡 Consider using a different dataset or increasing --max_length")
+        
+        if args.num_examples >= 50000:
+            print(f"\n🚀 Production-scale dataset created! Recommended training:")
+            print(f"   • Batch size: 64-128")
+            print(f"   • Epochs: 3")
+            print(f"   • Learning rate: 2e-5")
+            print(f"   • Expected training time: 2-4 hours on RTX 4090")
     
-    print(f"Training data written to {output_file}")
-    
-    # Generate validation split if requested
-    if args.validation_split > 0:
-        validation_file = output_file.parent / f"validation_{output_file.name}"
-        print(f"Creating validation split: {validation_file}")
-        
-        # Simple approach: take last N% of generated pairs for validation
-        create_validation_split(output_file, validation_file, args.validation_split)
+    except Exception as e:
+        print(f"❌ Error generating data: {e}")
+        raise
 
 def create_validation_split(input_file: Path, validation_file: Path, split_ratio: float):
     """Create validation split from training data."""
