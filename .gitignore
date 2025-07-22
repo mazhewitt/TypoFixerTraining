@@ -53,6 +53,11 @@ datasets/
 *.txt
 *.tsv
 
+# But include requirements files
+!requirements.txt
+!requirements-cloud.txt
+!*requirements*.txt
+
 # Model checkpoints and outputs
 models/
 checkpoints/
