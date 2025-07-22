@@ -7,16 +7,24 @@ Based on systematic analysis and targeted improvements to reach 90%+ token accur
 ### **Step 1: Environment Setup**
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/train-typo-fixer.git
-cd train-typo-fixer
+git clone https://github.com/mazhewitt/TypoFixerTraining.git
+cd TypoFixerTraining
 
 # Setup environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements-colab.txt  # Optimized for cloud
 
-# Verify GPU
+# Verify GPU  
 python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPU: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"None\"}')"
+
+# RTX 5090 Fix: Install PyTorch nightly for sm_120 support
+# If you get "no kernel image available" error, run:
+pip uninstall torch torchvision torchaudio -y
+pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124
+
+# Alternative: Force CPU training (slower but works):
+# export CUDA_VISIBLE_DEVICES=""
 ```
 
 ### **Step 2: Generate Improved Training Data**
@@ -154,6 +162,13 @@ python src/train.py \
 
 ## ⏱️ **Time & Cost Estimates**
 
+### **RTX 5090 (Your GPU):**
+- **Data generation:** 10 minutes (100K examples)
+- **Training:** 15-20 minutes (4 epochs, 100K examples) 
+- **Validation:** 1 minute
+- **Total time:** ~30 minutes
+- **Cost:** ~$10-15 on cloud GPU
+
 ### **RTX 5070/5080:**
 - **Data generation:** 15 minutes (100K examples)
 - **Training:** 20-25 minutes (4 epochs, 100K examples)
@@ -163,8 +178,8 @@ python src/train.py \
 
 ### **Comparison vs Original:**
 - **Original:** 72% accuracy in 4 minutes
-- **Optimized:** 88-90% accuracy in 45 minutes
-- **ROI:** 16-18% accuracy gain for 10x time investment
+- **Optimized RTX 5090:** 88-90% accuracy in 30 minutes
+- **ROI:** 16-18% accuracy gain for 7x time investment
 
 ---
 
