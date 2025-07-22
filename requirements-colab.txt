@@ -25,3 +25,5 @@ nvidia-ml-py3  # GPU monitoring
 ipython>=8.0.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
+# Additional utilities
+python-Levenshtein>=0.12.2
