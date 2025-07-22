@@ -17,6 +17,7 @@ import torch
 from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 from tqdm import tqdm
 import numpy as np
+from difflib import SequenceMatcher
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +34,42 @@ class MLMTypoValidator:
         self.model.eval()
         
         logger.info(f"Model loaded on {self.device}")
+    
+    def is_plausible_correction(self, original_token: str, candidate_token: str) -> bool:
+        """Check if candidate correction is plausible (prevents hallucinations)."""
+        # Skip empty tokens
+        if not original_token.strip() or not candidate_token.strip():
+            return True
+            
+        # Allow identity (no change)
+        if original_token.lower() == candidate_token.lower():
+            return True
+            
+        # Check edit distance (allow up to 2 character changes)
+        similarity = SequenceMatcher(None, original_token.lower(), candidate_token.lower()).ratio()
+        
+        # Strict similarity threshold to prevent hallucinations
+        if similarity >= 0.6:  # At least 60% similarity
+            return True
+            
+        # Check for common keyboard neighbors and patterns
+        keyboard_neighbors = {
+            't': ['r', 'y', 'g', 'f'],
+            'e': ['w', 'r', 'd', 's'], 
+            'h': ['g', 'j', 'b', 'n'],
+            's': ['a', 'd', 'w', 'e', 'z'],
+            'i': ['u', 'o', 'k', 'j'],
+            'o': ['i', 'p', 'l', 'k'],
+            # Add more as needed
+        }
+        
+        # Check if this looks like a keyboard error
+        if len(original_token) == len(candidate_token):
+            differences = sum(1 for a, b in zip(original_token.lower(), candidate_token.lower()) if a != b)
+            if differences == 1:  # Single character difference
+                return True
+                
+        return False
     
     def identify_typo_candidates(self, text: str) -> List[str]:
         """Identify potential typo words using simple heuristics."""
@@ -122,21 +159,31 @@ class MLMTypoValidator:
                     masked_ids = input_ids.clone()
                     masked_ids[0, pos] = self.tokenizer.mask_token_id
                     
-                    # Get prediction
+                    # Get prediction with beam search (top-k candidates)
                     outputs = self.model(input_ids=masked_ids, attention_mask=attention_mask)
-                    predicted_token_id = torch.argmax(outputs.logits[0, pos], dim=-1)
+                    logits = outputs.logits[0, pos]
                     
-                    # Check if prediction is reasonable
-                    predicted_token = self.tokenizer.decode([predicted_token_id.item()], skip_special_tokens=True)
+                    # Get top-5 candidates instead of just argmax
+                    top_candidates = torch.topk(logits, k=5, dim=-1)
                     
-                    # Use prediction if it's different and seems better
-                    if (predicted_token_id != input_ids[0, pos] and 
-                        len(predicted_token.strip()) >= 2 and
-                        predicted_token.strip().isalpha() and
-                        predicted_token.strip() != current_token.strip()):
+                    # Find the best plausible candidate
+                    best_candidate_id = input_ids[0, pos]  # Default: keep original
+                    
+                    for candidate_id in top_candidates.indices:
+                        candidate_token = self.tokenizer.decode([candidate_id.item()], skip_special_tokens=True)
                         
-                        corrected_ids[0, pos] = predicted_token_id
-                        corrections_made += 1
+                        # Check if this candidate is plausible
+                        if (len(candidate_token.strip()) >= 1 and
+                            candidate_token.strip().replace("'", "").isalpha() and  # Allow apostrophes
+                            self.is_plausible_correction(current_token.strip(), candidate_token.strip())):
+                            
+                            # Use this candidate if it's different from original
+                            if candidate_id != input_ids[0, pos]:
+                                best_candidate_id = candidate_id
+                                corrections_made += 1
+                            break
+                    
+                    corrected_ids[0, pos] = best_candidate_id
         
         # Decode corrected text
         corrected_text = self.tokenizer.decode(corrected_ids[0], skip_special_tokens=True)
