@@ -75,29 +75,53 @@ class TypoDataset(Dataset):
     def __getitem__(self, idx):
         return self.examples[idx]
 
-def freeze_model_layers(model, freeze_embeddings: bool = True, freeze_transformer: bool = True):
-    """Freeze specified model components, keeping only MLM head trainable."""
-    
-    total_params = sum(p.numel() for p in model.parameters())
-    
-    # First freeze everything
-    for param in model.parameters():
-        param.requires_grad = False
-    
-    # Then selectively unfreeze MLM head components
-    for param in model.vocab_transform.parameters():
-        param.requires_grad = True
-    for param in model.vocab_layer_norm.parameters():
-        param.requires_grad = True
+def freeze_model_layers(model, freeze_embeddings: bool = True,
+                        freeze_transformer: bool = True,
+                        unfreeze_last_n: int = 2):
+    """
+    Freeze or unfreeze DistilBERT components.
+
+    Args
+    ----
+    freeze_embeddings : bool
+        If True, keep embeddings frozen.
+    freeze_transformer : bool
+        If True, freeze the whole transformer except the last N layers.
+    unfreeze_last_n : int
+        Number of final transformer layers to keep trainable (ignored if
+        freeze_transformer=False).
+    """
+    total = sum(p.numel() for p in model.parameters())
+
+    # 1. Freeze everything up-front
+    for p in model.parameters():
+        p.requires_grad = False
+
+    # 2. Always unfreeze the MLM head
+    for p in model.vocab_transform.parameters():
+        p.requires_grad = True
+    for p in model.vocab_layer_norm.parameters():
+        p.requires_grad = True
     if hasattr(model, 'vocab_projector'):
-        for param in model.vocab_projector.parameters():
-            param.requires_grad = True
-    
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    
-    logger.info(f"Total parameters: {total_params:,}")
-    logger.info(f"Trainable parameters: {trainable_params:,} ({trainable_params/total_params*100:.1f}%)")
-    
+        for p in model.vocab_projector.parameters():
+            p.requires_grad = True
+
+    # 3. Optionally unfreeze embeddings
+    if not freeze_embeddings:
+        for p in model.distilbert.embeddings.parameters():
+            p.requires_grad = True
+
+    # 4. Optionally unfreeze last N transformer layers
+    if not freeze_transformer and unfreeze_last_n > 0:
+        layers = model.distilbert.transformer.layer
+        for layer_idx in range(-unfreeze_last_n, 0):
+            for p in layers[layer_idx].parameters():
+                p.requires_grad = True
+
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    logger.info(f"Total params: {total:,}")
+    logger.info(f"Trainable params: {trainable:,} ({100*trainable/total:.1f}%)")
+
     return model
 
 class TypoTrainer(Trainer):
@@ -186,7 +210,7 @@ def main():
     model = DistilBertForMaskedLM.from_pretrained(args.model_name)
     
     # Freeze model layers except MLM head
-    model = freeze_model_layers(model)
+    model = freeze_model_layers(model, False, False, 2)
     
     # Count trainable parameters
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
