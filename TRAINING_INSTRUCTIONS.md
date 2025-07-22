@@ -11,7 +11,7 @@ You'll go from our current 614-example proof-of-concept to a production model tr
 
 ---
 
-## Option A: GCP Vertex AI (Recommended - Jupyter Interface)
+## Option A: GCP Vertex AI (Jupyter Interface) - May Have GPU Availability Issues
 
 ### Step 1: Setup Vertex AI Notebook
 
@@ -20,15 +20,16 @@ You'll go from our current 614-example proof-of-concept to a production model tr
    - Click **"New Notebook"**
 
 2. **Configure Instance**
-   - **Environment**: PyTorch 1.13 (with CUDA)
+   - **Environment**: PyTorch 1.13 (with CUDA) or TensorFlow 2.x with GPU
    - **Machine type**: n1-standard-4 (4 vCPUs, 15GB RAM)
-   - **GPU**: NVIDIA Tesla V100 (or A100 if available)
-   - **Boot disk**: 100GB
+   - **GPU type**: NVIDIA L4, T4, V100, or A100 (L4 recommended - newer & efficient)
+   - **GPU count**: 1
+   - **Boot disk**: 100GB SSD
 
 3. **Launch Notebook**
    - Click **"Create"** (takes 3-5 minutes)
    - Click **"Open JupyterLab"** when ready
-   - **Verify GPU is enabled** in your runtime settings
+   - **IMPORTANT**: Ensure you selected a GPU-enabled machine type during setup
 
 ### Step 2: Setup Training Environment
 
@@ -93,7 +94,7 @@ else:
   --per_device_eval_batch_size 64 \
   --learning_rate 2e-5 \
   --max_seq_len 128 \
-  --save_steps 5000 \
+  --save_steps 4000 \
   --eval_steps 2000 \
   --logging_steps 500 \
   --load_best_model_at_end \
@@ -149,7 +150,38 @@ python src/ane_vs_cpu_benchmark.py
 
 ---
 
-## Option B: Vast.ai (Most Cost-Effective)
+## Option B: Google Colab Pro+ (Recommended - Always Available)
+
+### Step 1: Setup Colab Pro+
+
+1. **Go to https://colab.research.google.com**
+2. **Subscribe to Colab Pro+** ($50/month - unlimited usage)
+3. **Create new notebook**
+4. **Enable GPU**: Runtime → Change runtime type → GPU (A100/V100/T4)
+
+### Step 2: Setup Environment
+
+```python
+# Cell 1: Clone repository
+!git clone https://github.com/YOUR_USERNAME/train-typo-fixer.git
+%cd train-typo-fixer
+
+# Cell 2: Install requirements (optimized for Colab)
+!pip install -r requirements-colab.txt
+
+# Cell 3: Verify GPU
+import torch
+print(f"CUDA available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    !nvidia-smi
+```
+
+### Step 3: Training (Same as GCP instructions above)
+
+---
+
+## Option C: Vast.ai (Most Cost-Effective)
 
 ### Step 1: Setup Vast.ai Instance
 
@@ -246,6 +278,7 @@ python src/upload_to_hub.py \
 ### Cost Estimate
 | Provider | GPU | Time | Total Cost |
 |----------|-----|------|------------|
+| GCP Vertex AI | L4 | 2.5 hours | ~$15 |
 | GCP Vertex AI | V100 | 2 hours | ~$20 |
 | Vast.ai | RTX 4090 | 3 hours | ~$10 |
 | RunPod | RTX 4090 | 3 hours | ~$15 |
@@ -257,13 +290,23 @@ python src/upload_to_hub.py \
 ### Common Issues
 
 **🚨 No GPU Detected (CUDA available: False)**
+
+*For Google Colab:*
 ```python
-# MOST COMMON ISSUE: GPU not enabled in runtime
 # 1. Click "Runtime" → "Change runtime type"
 # 2. Hardware accelerator: Select "GPU" (T4, V100, or A100)
-# 3. Click "Save"
-# 4. Click "Runtime" → "Restart runtime" 
-# 5. Re-run your cells - you should see "CUDA available: True"
+# 3. Click "Save" → "Runtime" → "Restart runtime" 
+```
+
+*For GCP Vertex AI Workbench:*
+```python
+# GPU must be configured when creating the notebook instance
+# 1. Stop your current instance (if running)
+# 2. Create new notebook with GPU:
+#    - Environment: PyTorch with CUDA
+#    - Machine type: Include GPU (L4/T4/V100/A100)
+#    - GPU count: 1
+# 3. Cannot add GPU to existing CPU-only instance
 ```
 
 **🚨 Google Colab Runtime Issues**
