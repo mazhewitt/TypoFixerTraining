@@ -267,9 +267,12 @@ class MLMTypoValidator:
         mask = tokens['input_ids'] != labels
         masked_input = tokens['input_ids'].clone()
         masked_input[mask] = self.tokenizer.mask_token_id
+        # Move tensors to the same device as the model
+        masked_input = masked_input.to(self.device)
+        attention_mask = tokens['attention_mask'].to(self.device)
 
         with torch.no_grad():
-            logits = self.model(masked_input, attention_mask=tokens['attention_mask']).logits
+            logits = self.model(masked_input, attention_mask=attention_mask).logits
             preds = logits.argmax(-1)
 
         # restore unchanged tokens
