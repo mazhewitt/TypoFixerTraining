@@ -206,7 +206,7 @@ class MLMTypoValidator:
         correct_tokens = 0
         
         for i, (corrupted, expected) in enumerate(tqdm(test_cases, desc="Evaluating")):
-            predicted = self.correct_text_mlm(corrupted, max_length)
+            predicted = self.mlm_evaluate(corrupted, expected, max_length)
             
             # Check if correction was attempted
             if predicted != corrupted:
@@ -256,6 +256,26 @@ class MLMTypoValidator:
         results['partial_match_rate'] = results['partial_matches'] / len(test_cases)
         
         return results
+    
+    def mlm_evaluate(self, corrupted: str, expected: str, max_length: int) -> str:
+        """Evaluate by masking all positions where corrupted != expected."""
+        tokens = self.tokenizer(corrupted, truncation=True, padding='max_length',
+                                max_length=max_length, return_tensors='pt')
+        labels = self.tokenizer(expected, truncation=True, padding='max_length',
+                                max_length=max_length, return_tensors='pt')['input_ids']
+
+        mask = tokens['input_ids'] != labels
+        masked_input = tokens['input_ids'].clone()
+        masked_input[mask] = self.tokenizer.mask_token_id
+
+        with torch.no_grad():
+            logits = self.model(masked_input, attention_mask=tokens['attention_mask']).logits
+            preds = logits.argmax(-1)
+
+        # restore unchanged tokens
+        preds[~mask] = tokens['input_ids'][~mask]
+
+        return self.tokenizer.decode(preds[0], skip_special_tokens=True)
 
 def main():
     parser = argparse.ArgumentParser(description="MLM-based validation for DistilBERT typo correction")

@@ -18,8 +18,12 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 from tqdm import tqdm
 import numpy as np
 from difflib import SequenceMatcher
-import matplotlib.pyplot as plt
-import seaborn as sns
+try:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    PLOTTING = True
+except ImportError:
+    PLOTTING = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
