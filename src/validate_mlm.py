@@ -18,6 +18,7 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 from tqdm import tqdm
 import numpy as np
 from difflib import SequenceMatcher
+import Levenshtein
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,32 +37,31 @@ class MLMTypoValidator:
         logger.info(f"Model loaded on {self.device}")
     
     def is_plausible_correction(self, original_token: str, candidate_token: str) -> bool:
-        """Check if candidate correction is plausible (prevents hallucinations)."""
-        # Skip empty tokens
-        if not original_token.strip() or not candidate_token.strip():
+        """
+        Return True if `candidate_token` is an acceptable correction of `original_token`.
+        Rules:
+        1. Identity is always OK.
+        2. Empty tokens are rejected.
+        3. Levenshtein distance ≤ 2 AND similarity ≥ 0.6.
+        4. Candidate must be alphabetic (with apostrophes allowed).
+        """
+        original = original_token.strip()
+        candidate = candidate_token.strip()
+
+        if not original or not candidate:
+            return False
+        if original.lower() == candidate.lower():
             return True
-            
-        # Allow identity (no change)
-        if original_token.lower() == candidate_token.lower():
-            return True
-            
-        # Check edit distance (allow up to 2 character changes)
-        similarity = SequenceMatcher(None, original_token.lower(), candidate_token.lower()).ratio()
-        
-        # Strict similarity threshold to prevent hallucinations
-        if similarity >= 0.6:  # At least 60% similarity
-            return True
-            
-        # Check for common keyboard neighbors and patterns
-        keyboard_neighbors = {
-            't': ['r', 'y', 'g', 'f'],
-            'e': ['w', 'r', 'd', 's'], 
-            'h': ['g', 'j', 'b', 'n'],
-            's': ['a', 'd', 'w', 'e', 'z'],
-            'i': ['u', 'o', 'k', 'j'],
-            'o': ['i', 'p', 'l', 'k'],
-            # Add more as needed
-        }
+
+        # Basic alphabetic test
+        if not re.fullmatch(r"[A-Za-z']+", candidate):
+            return False
+
+        # Edit-distance & similarity gates
+        dist = Levenshtein.distance(original.lower(), candidate.lower())
+        sim = Levenshtein.ratio(original.lower(), candidate.lower())
+
+        return dist <= 2 and sim >= 0.60
         
         # Check if this looks like a keyboard error
         if len(original_token) == len(candidate_token):
