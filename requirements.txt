@@ -11,8 +11,8 @@ scikit-learn>=1.3.0
 # Hugging Face Hub integration
 huggingface_hub>=0.16.0
 
-# ANE deployment (macOS only)
-coremltools>=7.0
+# ANE deployment (macOS only - not needed for cloud training)
+# coremltools>=7.0  # Uncomment for local ANE conversion
 
 # Training utilities  
 safetensors>=0.3.0

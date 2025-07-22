@@ -14,5 +14,8 @@ ipython>=8.0.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
+# Skip PyTorch reinstallation (use Colab's pre-installed version)
+# This prevents NVIDIA library updates and speeds up installation
+
 # Optional experiment tracking
 # wandb  # Uncomment if using Weights & Biases

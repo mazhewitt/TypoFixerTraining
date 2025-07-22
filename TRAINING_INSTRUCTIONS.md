@@ -28,6 +28,7 @@ You'll go from our current 614-example proof-of-concept to a production model tr
 3. **Launch Notebook**
    - Click **"Create"** (takes 3-5 minutes)
    - Click **"Open JupyterLab"** when ready
+   - **Verify GPU is enabled** in your runtime settings
 
 ### Step 2: Setup Training Environment
 
@@ -40,16 +41,23 @@ You'll go from our current 614-example proof-of-concept to a production model tr
 ```
 
 ```python
-# Cell 2: Install dependencies
-!pip install -r requirements-cloud.txt
+# Cell 2: Install dependencies (optimized for Colab)
+!pip install -r requirements-colab.txt
+# This skips PyTorch reinstall to avoid NVIDIA library updates
 ```
 
 ```python
-# Cell 3: Verify GPU
+# Cell 3: Verify GPU is enabled
+# IF YOU SEE "CUDA available: False" - YOU NEED TO ENABLE GPU!
 import torch
 print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"GPU name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None'}")
-!nvidia-smi
+if torch.cuda.is_available():
+    print(f"GPU name: {torch.cuda.get_device_name(0)}")
+    !nvidia-smi
+else:
+    print("❌ NO GPU DETECTED!")
+    print("🔧 FIX: Runtime → Change runtime type → Hardware accelerator → GPU")
+    print("Then Runtime → Restart runtime and re-run this cell")
 ```
 
 ### Step 3: Generate Training Data
@@ -247,6 +255,26 @@ python src/upload_to_hub.py \
 ## Troubleshooting
 
 ### Common Issues
+
+**🚨 No GPU Detected (CUDA available: False)**
+```python
+# MOST COMMON ISSUE: GPU not enabled in runtime
+# 1. Click "Runtime" → "Change runtime type"
+# 2. Hardware accelerator: Select "GPU" (T4, V100, or A100)
+# 3. Click "Save"
+# 4. Click "Runtime" → "Restart runtime" 
+# 5. Re-run your cells - you should see "CUDA available: True"
+```
+
+**🚨 Google Colab Runtime Issues**
+```python
+# If you see dependency warnings or runtime won't connect:
+# 1. Click "Runtime" → "Disconnect and delete runtime"
+# 2. Wait 30 seconds, then click "Connect" to get a fresh runtime
+# 3. Make sure you have GPU enabled: Runtime → Change runtime type → GPU
+# 4. Re-run all cells from the beginning
+# 5. This is normal when upgrading packages in Colab
+```
 
 **🚨 CUDA Out of Memory**
 ```bash
