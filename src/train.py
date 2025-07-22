@@ -42,7 +42,6 @@ class TypoDataset(Dataset):
         with open(data_file, 'r', encoding='utf-8') as f:
             for line in tqdm(f, desc="Loading data"):
                 data = json.loads(line.strip())
-                
                 # Tokenize corrupted text
                 corrupted_tokens = self.tokenizer(
                     data['corrupted'],
@@ -51,7 +50,6 @@ class TypoDataset(Dataset):
                     max_length=max_length,
                     return_tensors='pt'
                 )
-                
                 # Tokenize clean text for labels
                 clean_tokens = self.tokenizer(
                     data['clean'],
@@ -60,14 +58,13 @@ class TypoDataset(Dataset):
                     max_length=max_length,
                     return_tensors='pt'
                 )
-                
-        self.examples.append({
-            'corrupted': data['corrupted'],
-            'clean': data['clean'],
-            'input_ids': corrupted_tokens['input_ids'].squeeze(),
-            'attention_mask': corrupted_tokens['attention_mask'].squeeze(),
-            'labels': clean_tokens['input_ids'].squeeze(),
-        })
+                self.examples.append({
+                    'corrupted': data['corrupted'],
+                    'clean': data['clean'],
+                    'input_ids': corrupted_tokens['input_ids'].squeeze(),
+                    'attention_mask': corrupted_tokens['attention_mask'].squeeze(),
+                    'labels': clean_tokens['input_ids'].squeeze(),
+                })
         
         logger.info(f"Loaded {len(self.examples)} examples")
     
