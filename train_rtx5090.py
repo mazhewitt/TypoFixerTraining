@@ -68,20 +68,32 @@ class QwenTypoDataset(Dataset):
                 prompt_tokens = self.tokenizer(
                     prompt + "\n",
                     truncation=True,
-                    padding='max_length',
+                    padding=False,  # Don't pad for length calculation
                     max_length=max_length,
                     return_tensors='pt'  
                 )
-                prompt_length = min(prompt_tokens['input_ids'].shape[-1], labels.shape[-1])
+                prompt_length = prompt_tokens['input_ids'].shape[-1]
                 
-                # Mask prompt tokens (-100 = ignore in loss)
-                labels[:, :prompt_length] = -100
-                
-                self.examples.append({
-                    'input_ids': encoding['input_ids'].squeeze(),
-                    'attention_mask': encoding['attention_mask'].squeeze(),
-                    'labels': labels.squeeze(),
-                })
+                # Only mask prompt tokens, leave target tokens for learning
+                if prompt_length < labels.shape[-1]:
+                    labels[:, :prompt_length] = -100
+                    
+                    # Debug: Check if we have any non-masked tokens
+                    non_masked_tokens = (labels != -100).sum().item()
+                    if len(self.examples) < 3:  # Debug first few examples
+                        logger.info(f"Example {len(self.examples)+1}: prompt_len={prompt_length}, total_len={labels.shape[-1]}, learning_tokens={non_masked_tokens}")
+                        logger.info(f"  Prompt: '{prompt}'")
+                        logger.info(f"  Target: '{target}'")
+                    
+                    if non_masked_tokens > 0:  # Only add if there are tokens to learn from
+                        self.examples.append({
+                            'input_ids': encoding['input_ids'].squeeze(),
+                            'attention_mask': encoding['attention_mask'].squeeze(),
+                            'labels': labels.squeeze(),
+                        })
+                else:
+                    # If prompt is too long, skip this example
+                    continue
         
         logger.info(f"✅ Loaded {len(self.examples)} training examples")
     
@@ -180,6 +192,7 @@ def main():
     
     # Set memory optimization environment variables
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Suppress tokenizer warnings
     
     # Set seed
     set_seed(42)
