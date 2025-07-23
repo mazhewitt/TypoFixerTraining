@@ -177,9 +177,9 @@ def main():
                        help='Training epochs')
     parser.add_argument('--warmup_ratio', type=float, default=0.03,
                        help='Warmup ratio')
-    parser.add_argument('--save_steps', type=int, default=50,
-                       help='Save every N steps')
-    parser.add_argument('--eval_steps', type=int, default=50,
+    parser.add_argument('--save_steps', type=int, default=100,
+                       help='Save every N steps (reduced to save disk space)')
+    parser.add_argument('--eval_steps', type=int, default=100,
                        help='Eval every N steps')
     parser.add_argument('--logging_steps', type=int, default=10,
                        help='Log every N steps')
@@ -244,7 +244,7 @@ def main():
         eval_steps=args.eval_steps,
         save_strategy="steps",
         save_steps=args.save_steps,
-        save_total_limit=2,  # Reduced to save disk space
+        save_total_limit=1,  # Only keep best checkpoint
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,  # Lower loss is better
@@ -265,6 +265,7 @@ def main():
         remove_unused_columns=False,
         prediction_loss_only=True,  # Faster evaluation, saves memory
         include_inputs_for_metrics=False,
+        save_safetensors=True,  # More efficient checkpoint format
         
         # Disable wandb by default
         report_to=[],
