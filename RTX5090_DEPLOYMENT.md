@@ -8,11 +8,8 @@
 git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
 cd TypoFixerTraining
 
-# Run RTX 5090 setup
+# Run RTX 5090 setup (uses global Python packages)
 ./setup_rtx5090.sh
-
-# Activate environment
-source venv/bin/activate
 ```
 
 ### 2. Verify RTX 5090 Setup

@@ -94,13 +94,11 @@ training_args = TrainingArguments(
 git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
 cd TypoFixerTraining
 
-# Setup RTX 5090 environment
+# Setup RTX 5090 environment (uses global Python packages)
 ./setup_rtx5090.sh
-source venv/bin/activate
 
-# Verify GPU setup
+# Verify GPU setup (already done by setup script)
 nvidia-smi
-python3 -c "import torch; print(f'GPU: {torch.cuda.get_device_name(0)}')"
 ```
 
 #### Phase 2: Training Execution (20 minutes)
