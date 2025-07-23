@@ -100,5 +100,5 @@ def test_model(model_path):
         print()
 
 if __name__ == "__main__":
-    model_path = "mazhewitt/qwen-typo-fixer"  # HuggingFace uploaded model
+    model_path = "mazhewitt/qwen-typo-fixer"  # Updated anti-overfitting model
     test_model(model_path)
