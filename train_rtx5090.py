@@ -239,10 +239,10 @@ def main():
     # Set seed
     set_seed(42)
     
-    logger.info("🚀 RTX 5090 Qwen Typo Correction Training")
+    logger.info("🚀 Dual RTX 5070 Ti Qwen Typo Correction Training")
     logger.info(f"📁 Output: {args.output_dir}")
     logger.info(f"🎯 Target accuracy: {args.target_accuracy:.1%}")
-    logger.info(f"⚡ RTX 5090 optimizations enabled")
+    logger.info(f"⚡ Dual RTX 5070 Ti optimizations enabled (32GB total VRAM)")
     
     # Create output directory
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
@@ -264,7 +264,7 @@ def main():
     logger.info(f"📊 Effective batch size: {effective_batch_size}")
     logger.info(f"📊 Total training steps: {total_steps:,}")
     
-    # RTX 5090 optimized training arguments
+    # Dual RTX 5070 Ti optimized training arguments
     training_args = TrainingArguments(
         # Basic setup
         output_dir=args.output_dir,
@@ -291,12 +291,13 @@ def main():
         metric_for_best_model="eval_sentence_accuracy",
         greater_is_better=True,
         
-        # RTX 5090 performance optimizations
+        # Dual RTX 5070 Ti performance optimizations
         bf16=True,  # Use bfloat16 instead of fp16
         tf32=True,  # Enable TF32 for even better performance
         dataloader_pin_memory=True,
-        dataloader_num_workers=8,  # More workers for faster data loading
+        dataloader_num_workers=16,  # More workers for dual GPU setup
         gradient_checkpointing=True,  # Save memory for larger batches
+        ddp_find_unused_parameters=False,  # Optimize for multi-GPU
         
         # Logging
         logging_dir=f"{args.output_dir}/logs",
@@ -310,7 +311,7 @@ def main():
         
         # Disable wandb by default
         report_to=[],
-        run_name=f"qwen-typo-{args.num_epochs}ep-rtx5090",
+        run_name=f"qwen-typo-{args.num_epochs}ep-dual5070ti",
     )
     
     # Create trainer
@@ -324,21 +325,22 @@ def main():
     )
     
     # Training info
-    logger.info(f"\n📋 RTX 5090 Training Plan:")
-    logger.info(f"   GPU: RTX 5090 (32GB VRAM)")
+    logger.info(f"\n📋 Dual RTX 5070 Ti Training Plan:")
+    logger.info(f"   GPUs: 2x RTX 5070 Ti (32GB total VRAM)")
     logger.info(f"   Precision: BFloat16 + TF32")
     logger.info(f"   Flash Attention 2: Enabled")
     logger.info(f"   Batch size: {args.batch_size} x {args.gradient_accumulation_steps} = {effective_batch_size}")
+    logger.info(f"   Data workers: 16 (optimized for dual GPU)")
     logger.info(f"   Total steps: {total_steps:,}")
     logger.info(f"   Eval every: {args.eval_steps} steps")
     logger.info(f"   Save every: {args.save_steps} steps")
     
-    # Estimate training time on RTX 5090
-    estimated_time_min = total_steps * 0.5 / 60  # ~0.5 sec per step estimate
+    # Estimate training time on dual RTX 5070 Ti
+    estimated_time_min = total_steps * 0.4 / 60  # ~0.4 sec per step estimate (faster with 2 GPUs)
     logger.info(f"   Estimated time: {estimated_time_min:.1f} minutes")
     
     # Start training
-    logger.info("\n🚀 Starting RTX 5090 training...")
+    logger.info("\n🚀 Starting dual RTX 5070 Ti training...")
     start_time = time.time()
     
     try:
@@ -373,7 +375,7 @@ def main():
             "final_accuracy": final_accuracy,
             "target_accuracy": args.target_accuracy,
             "target_achieved": final_accuracy >= args.target_accuracy,
-            "gpu": "RTX 5090",
+            "gpu": "2x RTX 5070 Ti",
             "optimizations": ["BFloat16", "TF32", "Flash Attention 2"],
             "total_steps": total_steps,
         }

@@ -37,14 +37,14 @@ except Exception as e:
 echo "🔍 Verifying CUDA setup..."
 python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'GPU count: {torch.cuda.device_count()}'); print(f'GPU name: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"N/A\"}')"
 
-# Set environment variables for optimal RTX 5090 performance
-echo "⚙️ Setting RTX 5090 optimization environment variables..."
-export CUDA_VISIBLE_DEVICES=0
-export TORCH_CUDA_ARCH_LIST="8.9"  # RTX 5090 architecture
+# Set environment variables for optimal dual RTX 5070 Ti performance
+echo "⚙️ Setting dual RTX 5070 Ti optimization environment variables..."
+export CUDA_VISIBLE_DEVICES=0,1  # Use both GPUs
+export TORCH_CUDA_ARCH_LIST="8.9"  # RTX 5070 Ti architecture
 export TOKENIZERS_PARALLELISM=false
 
 # Add to bashrc for persistence
-echo "export CUDA_VISIBLE_DEVICES=0" >> ~/.bashrc
+echo "export CUDA_VISIBLE_DEVICES=0,1" >> ~/.bashrc
 echo "export TORCH_CUDA_ARCH_LIST=\"8.9\"" >> ~/.bashrc
 echo "export TOKENIZERS_PARALLELISM=false" >> ~/.bashrc
 
@@ -61,14 +61,15 @@ else
     echo "✅ Training data already exists"
 fi
 
-echo "✅ RTX 5090 environment setup complete!"
+echo "✅ Dual RTX 5070 Ti environment setup complete!"
 echo ""
 echo "📋 Next steps:"
-echo "1. Run training: python3 train_rtx5090.py --train_file data/enhanced_training_full.jsonl --output_dir models/qwen-typo-fixer-rtx5090 --hf_repo mazhewitt/qwen-typo-fixer"
+echo "1. Run training: python3 train_rtx5090.py --train_file data/enhanced_training_full.jsonl --output_dir models/qwen-typo-fixer-dual5070ti --hf_repo mazhewitt/qwen-typo-fixer"
 echo ""
-echo "🔧 Environment optimized for RTX 5090:"
-echo "   - CUDA_VISIBLE_DEVICES=0"
-echo "   - TORCH_CUDA_ARCH_LIST=8.9 (RTX 5090 architecture)"
+echo "🔧 Environment optimized for dual RTX 5070 Ti:"
+echo "   - CUDA_VISIBLE_DEVICES=0,1 (both GPUs)"
+echo "   - Total VRAM: 32GB (16GB each)"
+echo "   - TORCH_CUDA_ARCH_LIST=8.9 (RTX 5070 Ti architecture)"
 echo "   - Flash Attention 2 enabled (if available)"
 echo "   - BFloat16 + TF32 precision"
 echo "   - Global Python packages used (no venv)"
