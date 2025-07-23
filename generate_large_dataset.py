@@ -133,8 +133,8 @@ def corrupt_word(word):
     if not word or len(word) < 2:
         return word
     
-    # 40% chance of no corruption
-    if random.random() < 0.4:
+    # 20% chance of no corruption (reduced from 40%)
+    if random.random() < 0.2:
         return word
     
     word_lower = word.lower().strip('.,!?;:"\'')
@@ -167,7 +167,7 @@ def corrupt_word(word):
     
     return ''.join(chars)
 
-def corrupt_sentence(sentence, corruption_rate=0.15):
+def corrupt_sentence(sentence, corruption_rate=0.25):
     """Apply corruption to a sentence."""
     words = sentence.split()
     corrupted_words = []
@@ -180,7 +180,7 @@ def corrupt_sentence(sentence, corruption_rate=0.15):
     
     return ' '.join(corrupted_words)
 
-def generate_dataset_serial(output_file, num_examples=50000, corruption_rate=0.15):
+def generate_dataset_serial(output_file, num_examples=50000, corruption_rate=0.25):
     """Generate dataset serially - no threading."""
     print(f"🔄 Generating {num_examples:,} examples serially (no threading)...")
     print(f"📁 Output: {output_file}")
@@ -212,19 +212,32 @@ def generate_dataset_serial(output_file, num_examples=50000, corruption_rate=0.1
             # Apply corruption
             corrupted = corrupt_sentence(sentence, corruption_rate)
             
-            # Only include if corruption occurred
-            if corrupted != sentence:
-                data = {
-                    "corrupted": corrupted,
-                    "clean": sentence,
-                    "complexity": "generated",
-                    "word_count": len(sentence.split()),
-                    "char_count": len(sentence),
-                    "source": "serial_generation"
-                }
-                
-                f.write(json.dumps(data) + '\n')
-                generated += 1
+            # Force corruption if none occurred (ensure we get 50K examples)
+            attempts = 0
+            while corrupted == sentence and attempts < 5:
+                corrupted = corrupt_sentence(sentence, corruption_rate * 2)  # Double the rate
+                attempts += 1
+            
+            # Always include (even if no corruption, we need the examples)
+            if corrupted == sentence:
+                # Force at least one typo by corrupting a random word
+                words = sentence.split()
+                if len(words) > 1:
+                    idx = random.randint(0, len(words) - 1)
+                    words[idx] = corrupt_word(words[idx])
+                    corrupted = ' '.join(words)
+            
+            data = {
+                "corrupted": corrupted,
+                "clean": sentence,
+                "complexity": "generated",
+                "word_count": len(sentence.split()),
+                "char_count": len(sentence),
+                "source": "serial_generation"
+            }
+            
+            f.write(json.dumps(data) + '\n')
+            generated += 1
     
     elapsed = time.time() - start_time
     print(f"✅ Generated {generated:,} examples in {elapsed/60:.1f} minutes")
@@ -247,7 +260,7 @@ def main():
         generated = generate_dataset_serial(
             output_file=output_file,
             num_examples=50000,
-            corruption_rate=0.15
+            corruption_rate=0.25
         )
         
         if generated >= 20000:
