@@ -18,176 +18,45 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 from tqdm import tqdm
 import numpy as np
 from difflib import SequenceMatcher
-import Levenshtein
+from typo_correction import TypoCorrector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MLMTypoValidator:
     def __init__(self, model_dir: str):
-        """Initialize validator with trained MLM model."""
+        """Initialize validator with trained MLM model using the new TypoCorrector."""
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         logger.info(f"Loading model from {model_dir}")
         self.tokenizer = DistilBertTokenizer.from_pretrained(model_dir)
         self.model = DistilBertForMaskedLM.from_pretrained(model_dir)
-        self.model.to(self.device)
-        self.model.eval()
         
-        logger.info(f"Model loaded on {self.device}")
-    
-    def is_plausible_correction(self, original_token: str, candidate_token: str) -> bool:
-        """
-        Return True if `candidate_token` is an acceptable correction of `original_token`.
-        Rules:
-        1. Identity is always OK.
-        2. Empty tokens are rejected.
-        3. Levenshtein distance ≤ 2 AND similarity ≥ 0.6.
-        4. Candidate must be alphabetic (with apostrophes allowed).
-        """
-        original = original_token.strip()
-        candidate = candidate_token.strip()
-
-        if not original or not candidate:
-            return False
-        if original.lower() == candidate.lower():
-            return True
-
-        # Basic alphabetic test
-        if not re.fullmatch(r"[A-Za-z']+", candidate):
-            return False
-
-        # Edit-distance & similarity gates
-        dist = Levenshtein.distance(original.lower(), candidate.lower())
-        sim = Levenshtein.ratio(original.lower(), candidate.lower())
-
-        return dist <= 2 and sim >= 0.60
-        
-        # Check if this looks like a keyboard error
-        if len(original_token) == len(candidate_token):
-            differences = sum(1 for a, b in zip(original_token.lower(), candidate_token.lower()) if a != b)
-            if differences == 1:  # Single character difference
-                return True
-                
-        return False
-    
-    def identify_typo_candidates(self, text: str) -> List[str]:
-        """Identify potential typo words using simple heuristics."""
-        words = text.split()
-        typo_candidates = []
-        
-        # Simple heuristics for potential typos
-        common_patterns = [
-            r'\b\w*[sz]is\w*\b',      # "sis" instead of "is"
-            r'\b\w*teh\w*\b',         # "teh" instead of "the"  
-            r'\b\w*too\b',            # "too" instead of "to" (context dependent)
-            r'\b\w*sentenc\w*\b',     # missing 'e' in sentence
-            r'\b\w*mistaks?\w*\b',    # "mistaks" instead of "mistakes"
-            r'\b\w*beutiful\w*\b',    # "beutiful" instead of "beautiful"
-            r'\b\w*outsid\w*\b',      # "outsid" instead of "outside"
-            r'\b\w*quikc?\w*\b',      # "quikc" instead of "quick"
-            r'\b\w*stor\w*\b',        # "stor" instead of "store"
-            r'\b\w*som\b',            # "som" instead of "some"
-            r'\b\w*ther\b',           # "ther" instead of "there"
-        ]
-        
-        for word in words:
-            # Check against patterns
-            for pattern in common_patterns:
-                if re.search(pattern, word.lower()):
-                    typo_candidates.append(word.lower())
-                    break
-            
-            # Additional heuristics
-            # Short words with repeated letters
-            if len(word) >= 3 and len(set(word.lower())) < len(word) * 0.6:
-                typo_candidates.append(word.lower())
-                
-            # Words with unusual character sequences
-            if re.search(r'[bcdfghjklmnpqrstvwxyz]{3,}', word.lower()):
-                typo_candidates.append(word.lower())
-        
-        return list(set(typo_candidates))
-    
-    def correct_text_mlm(self, corrupted_text: str, max_length: int = 128) -> str:
-        """Correct text using MLM approach - mask suspected typos and predict."""
-        # Tokenize input
-        inputs = self.tokenizer(
-            corrupted_text,
-            truncation=True,
-            padding='max_length',
-            max_length=max_length,
-            return_tensors='pt'
+        # Initialize the new TypoCorrector with optimized parameters for validation
+        self.corrector = TypoCorrector(
+            model=self.model,
+            tokenizer=self.tokenizer,
+            low_prob_threshold=-4.0,  # More sensitive for fine-tuned models
+            edit_penalty_lambda=1.0,  # Lower penalty for more corrections
+            top_k=8,
+            max_passes=2,  # Fewer passes for faster validation
+            device=str(self.device)
         )
         
-        input_ids = inputs['input_ids'].to(self.device)
-        attention_mask = inputs['attention_mask'].to(self.device)
+        logger.info(f"Model loaded on {self.device} with TypoCorrector")
+    
+    
+    def correct_text_mlm(self, corrupted_text: str, max_length: int = 128) -> str:
+        """Correct text using the new TypoCorrector algorithm."""
+        corrected_text, stats = self.corrector.correct_typos(corrupted_text)
         
-        # Get word-level candidates for correction
-        typo_candidates = self.identify_typo_candidates(corrupted_text)
+        # Log correction stats for debugging
+        if stats['total_corrections'] > 0:
+            logger.debug(f"Corrections made: {stats['total_corrections']} in {stats['passes_used']} passes")
+            for correction in stats['corrections_made']:
+                logger.debug(f"  '{correction['original']}' -> '{correction['corrected']}' (score: {correction['score']:.2f})")
         
-        corrected_ids = input_ids.clone()
-        corrections_made = 0
-        
-        with torch.no_grad():
-            # Iterate through each token position
-            for pos in range(1, input_ids.shape[1] - 1):  # Skip CLS and SEP
-                if attention_mask[0, pos] == 0:  # Skip padding
-                    break
-                    
-                # Decode current token
-                current_token = self.tokenizer.decode([input_ids[0, pos].item()], skip_special_tokens=True)
-                
-                # Check if this token might be part of a typo
-                should_check = False
-                if len(current_token.strip()) > 1:  # Only check substantial tokens
-                    # Check if token contains typo candidates
-                    for candidate in typo_candidates:
-                        if candidate in current_token.lower() or current_token.lower() in candidate:
-                            should_check = True
-                            break
-                    
-                    # Also check tokens that look suspicious
-                    if (not should_check and len(current_token.strip()) >= 3):
-                        # Check for common typo patterns
-                        if (current_token.lower() in ['teh', 'sis', 'sentenc', 'mistaks', 'beutiful', 'outsid', 'quikc', 'stor', 'som', 'ther'] or
-                            'teh' in current_token.lower() or 'sis' in current_token.lower()):
-                            should_check = True
-                
-                if should_check:
-                    # Create masked version
-                    masked_ids = input_ids.clone()
-                    masked_ids[0, pos] = self.tokenizer.mask_token_id
-                    
-                    # Get prediction with beam search (top-k candidates)
-                    outputs = self.model(input_ids=masked_ids, attention_mask=attention_mask)
-                    logits = outputs.logits[0, pos]
-                    
-                    # Get top-5 candidates instead of just argmax
-                    top_candidates = torch.topk(logits, k=5, dim=-1)
-                    
-                    # Find the best plausible candidate
-                    best_candidate_id = input_ids[0, pos]  # Default: keep original
-                    
-                    for candidate_id in top_candidates.indices:
-                        candidate_token = self.tokenizer.decode([candidate_id.item()], skip_special_tokens=True)
-                        
-                        # Check if this candidate is plausible
-                        if (len(candidate_token.strip()) >= 1 and
-                            candidate_token.strip().replace("'", "").isalpha() and  # Allow apostrophes
-                            self.is_plausible_correction(current_token.strip(), candidate_token.strip())):
-                            
-                            # Use this candidate if it's different from original
-                            if candidate_id != input_ids[0, pos]:
-                                best_candidate_id = candidate_id
-                                corrections_made += 1
-                            break
-                    
-                    corrected_ids[0, pos] = best_candidate_id
-        
-        # Decode corrected text
-        corrected_text = self.tokenizer.decode(corrected_ids[0], skip_special_tokens=True)
-        return corrected_text.strip()
+        return corrected_text
     
     def evaluate_corrections(self, test_cases: List[Tuple[str, str]], max_length: int = 128) -> Dict:
         """Evaluate model on test cases."""
@@ -206,7 +75,7 @@ class MLMTypoValidator:
         correct_tokens = 0
         
         for i, (corrupted, expected) in enumerate(tqdm(test_cases, desc="Evaluating")):
-            predicted = self.mlm_evaluate(corrupted, expected, max_length)
+            predicted = self.correct_text_mlm(corrupted, max_length)
             
             # Check if correction was attempted
             if predicted != corrupted:

@@ -150,6 +150,27 @@ def word_space_split(word: str) -> str:
     split_pos = random.randint(1, len(word) - 1)
     return word[:split_pos] + ' ' + word[split_pos:]
 
+def word_joining(words: List[str], word_idx: int) -> List[str]:
+    """Join last letter of current word to next word (e.g., 'it works' -> 'i tworks')."""
+    if word_idx >= len(words) - 1:  # Can't join if this is the last word
+        return words
+    
+    current_word = words[word_idx]
+    next_word = words[word_idx + 1]
+    
+    # Skip if either word is too short or contains punctuation
+    if (len(current_word) <= 1 or len(next_word) < 1 or 
+        not re.match(r'^[a-zA-Z\']+$', current_word) or 
+        not re.match(r'^[a-zA-Z\']+$', next_word)):
+        return words
+    
+    # Take last letter from current word and prepend to next word
+    modified_words = words.copy()
+    modified_words[word_idx] = current_word[:-1]  # Remove last letter
+    modified_words[word_idx + 1] = current_word[-1] + next_word  # Add it to next word
+    
+    return modified_words
+
 def word_confusion(word: str) -> str:
     """Replace word with commonly confused alternative."""
     word_lower = word.lower()
@@ -170,35 +191,48 @@ def word_confusion(word: str) -> str:
 def corrupt_sentence(sentence: str, corruption_rate: float = 0.15) -> str:
     """Apply random corruptions to a sentence."""
     words = sentence.split()
-    corrupted_words = []
+    corrupted_words = words.copy()
     
-    # Character-level corruption functions
-    char_corruption_functions = [
-        keyboard_neighbor_swap,
-        character_drop, 
-        character_double,
-        character_transpose,
-        word_space_split
-    ]
+    # Track which words have been modified
+    modified_indices = set()
     
-    for word in words:
-        # Skip very short words and punctuation for character corruptions
-        if len(word) <= 1 or not re.match(r'^[a-zA-Z\']+$', word):
-            corrupted_words.append(word)
+    # First pass: apply word-level corruptions that affect multiple words
+    for i in range(len(words)):
+        if i in modified_indices:
             continue
             
         if random.random() < corruption_rate:
             # 30% chance of word confusion (homophone/contextual errors)
-            # 70% chance of character-level corruption
-            if random.random() < 0.3:
-                corrupted_word = word_confusion(word)
-            else:
-                corruption_func = random.choice(char_corruption_functions)
-                corrupted_word = corruption_func(word)
+            # 35% chance of word joining (half of what used to be keyboard neighbor)
+            # 35% chance of character-level corruption
+            rand_val = random.random()
             
-            corrupted_words.append(corrupted_word)
-        else:
-            corrupted_words.append(word)
+            if rand_val < 0.3:
+                # Word confusion
+                if len(words[i]) > 1 and re.match(r'^[a-zA-Z\']+$', words[i]):
+                    corrupted_words[i] = word_confusion(words[i])
+                    modified_indices.add(i)
+            elif rand_val < 0.65:
+                # Word joining (replaces half of keyboard neighbor swaps)
+                if i < len(words) - 1:  # Can only join if not the last word
+                    result_words = word_joining(corrupted_words, i)
+                    if result_words != corrupted_words:  # Only if joining actually happened
+                        corrupted_words = result_words
+                        modified_indices.add(i)
+                        modified_indices.add(i + 1)
+            else:
+                # Character-level corruption (remaining keyboard neighbors + others)
+                if len(words[i]) > 1 and re.match(r'^[a-zA-Z\']+$', words[i]):
+                    char_corruption_functions = [
+                        keyboard_neighbor_swap,
+                        character_drop, 
+                        character_double,
+                        character_transpose,
+                        word_space_split
+                    ]
+                    corruption_func = random.choice(char_corruption_functions)
+                    corrupted_words[i] = corruption_func(words[i])
+                    modified_indices.add(i)
     
     return ' '.join(corrupted_words)
 
