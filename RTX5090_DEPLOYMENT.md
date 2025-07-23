@@ -25,14 +25,13 @@ python3 -c "import torch; print(f'GPU: {torch.cuda.get_device_name(0)}'); print(
 ```bash
 # Train with RTX 5090 optimizations
 python3 train_rtx5090.py \
-  --train_file data/enhanced_training_full.jsonl \
-  --output_dir models/qwen-typo-fixer-rtx5090 \
-  --hf_repo mazhewitt/qwen-typo-fixer \
-  --batch_size 24 \
-  --gradient_accumulation_steps 2 \
-  --num_epochs 3 \
-  --learning_rate 2e-5 \
-  --target_accuracy 0.9
+    --train_file data/enhanced_training_full.jsonl \
+    --output_dir models/qwen-typo-fixer-mem-opt \
+    --hf_repo mazhewitt/qwen-typo-fixer \
+    --batch_size 4 \
+    --gradient_accumulation_steps 8 \
+    --max_seq_len 128 \
+    --num_epochs 3
 ```
 
 ### 4. Monitor Training

@@ -91,66 +91,7 @@ class QwenTypoDataset(Dataset):
     def __getitem__(self, idx):
         return self.examples[idx]
 
-class AccuracyTrainer(Trainer):
-    """Enhanced trainer with real-time accuracy tracking."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.best_accuracy = 0.0
-    
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        """Standard causal LM loss."""
-        outputs = model(**inputs)
-        loss = outputs.loss
-        return (loss, outputs) if return_outputs else loss
-    
-    def evaluate(self, eval_dataset=None, ignore_keys=None, metric_key_prefix="eval"):
-        """Enhanced evaluation with sentence accuracy."""
-        # Standard evaluation
-        eval_results = super().evaluate(eval_dataset, ignore_keys, metric_key_prefix)
-        
-        # Quick accuracy check on subset
-        if eval_dataset and len(eval_dataset) > 0:
-            accuracy = self._compute_quick_accuracy(eval_dataset, num_samples=20)
-            eval_results[f"{metric_key_prefix}_sentence_accuracy"] = accuracy
-            
-            # Track best accuracy
-            if accuracy > self.best_accuracy:
-                self.best_accuracy = accuracy
-                logger.info(f"🎯 New best accuracy: {accuracy:.1%}")
-            
-            logger.info(f"📊 Current accuracy: {accuracy:.1%} (best: {self.best_accuracy:.1%})")
-        
-        return eval_results
-    
-    def _compute_quick_accuracy(self, dataset, num_samples=20):
-        """Quick accuracy computation on sample."""
-        self.model.eval()
-        
-        # Sample examples
-        total_size = len(dataset)
-        if hasattr(dataset, 'examples'):  # Direct dataset
-            examples = dataset.examples
-        else:  # Subset dataset
-            examples = [dataset.dataset.examples[i] for i in dataset.indices]
-        
-        sample_indices = random.sample(range(len(examples)), min(num_samples, len(examples)))
-        
-        correct = 0
-        total = 0
-        
-        with torch.no_grad():
-            for idx in sample_indices:
-                # Get original text (need to reconstruct from tokenized data)
-                # This is a simplified check - just verify loss is decreasing
-                total += 1
-                
-                # For now, approximate based on loss - in real eval, you'd regenerate
-                # This is a placeholder - actual accuracy needs text generation
-                correct += 1 if random.random() > 0.5 else 0  # Placeholder
-        
-        self.model.train()
-        return correct / total if total > 0 else 0.0
+# Using standard Trainer for simplicity and memory efficiency
 
 def setup_model_tokenizer(model_name: str):
     """Setup model and tokenizer for RTX 5090."""
@@ -292,8 +233,8 @@ def main():
         save_steps=args.save_steps,
         save_total_limit=2,  # Reduced to save disk space
         load_best_model_at_end=True,
-        metric_for_best_model="eval_sentence_accuracy",
-        greater_is_better=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,  # Lower loss is better
         
         # Memory optimizations for RTX 5070 Ti (16GB each)
         bf16=True,  # Use BF16 - more stable than FP16
@@ -318,7 +259,7 @@ def main():
     )
     
     # Create trainer
-    trainer = AccuracyTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
