@@ -10,11 +10,14 @@
 ### 1. Clone and Setup Environment
 ```bash
 # Clone the TypoFixerTraining repo on qwen-approach branch
-git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
-cd TypoFixerTraining
+  git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
+  cd TypoFixerTraining
 
-# Run setup with LARGE dataset generation (takes 10-15 minutes)
+# Run basic environment setup
 ./setup_rtx5090.sh
+
+# Generate LARGE dataset separately (more reliable, prevents threading crashes)
+python3 generate_large_dataset.py
 ```
 
 ### 2. Verify Dual RTX 5070 Ti Setup

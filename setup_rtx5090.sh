@@ -50,19 +50,34 @@ echo "export TOKENIZERS_PARALLELISM=false" >> ~/.bashrc
 
 # Generate large dataset for proper training (prevents overfitting)
 echo "📊 Checking for large training dataset..."
+# Remove old small dataset
+if [ -f "data/enhanced_training_full.jsonl" ]; then
+    echo "🗑️ Removing old small dataset ($(wc -l < data/enhanced_training_full.jsonl) examples)..."
+    rm data/enhanced_training_full.jsonl
+fi
+
 if [ ! -f "data/enhanced_training_large.jsonl" ]; then
     echo "🔄 Generating LARGE enhanced training dataset (50K examples)..."
     echo "⏱️ This will take 10-15 minutes but prevents overfitting..."
     mkdir -p data
-    python3 src/realistic_data_generation.py \
+    
+    # Generate large dataset with better error handling
+    PYTHONUNBUFFERED=1 python3 src/realistic_data_generation.py \
         --output data/enhanced_training_large.jsonl \
         --num_examples 50000 \
-        --corruption_rate 0.15
-    echo "✅ Large dataset generated: $(wc -l < data/enhanced_training_large.jsonl) examples"
+        --corruption_rate 0.15 \
+        2>&1 | tee data/generation.log
     
-    # Validate the generated dataset
-    echo "🔍 Validating dataset quality..."
-    python3 validate_dataset.py data/enhanced_training_large.jsonl
+    if [ -f "data/enhanced_training_large.jsonl" ]; then
+        echo "✅ Large dataset generated: $(wc -l < data/enhanced_training_large.jsonl) examples"
+        
+        # Validate the generated dataset
+        echo "🔍 Validating dataset quality..."
+        python3 validate_dataset.py data/enhanced_training_large.jsonl
+    else
+        echo "❌ Dataset generation failed! Check data/generation.log"
+        exit 1
+    fi
 else
     echo "✅ Large training data already exists: $(wc -l < data/enhanced_training_large.jsonl) examples"
     
