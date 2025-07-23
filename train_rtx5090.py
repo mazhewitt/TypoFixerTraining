@@ -78,12 +78,8 @@ class QwenTypoDataset(Dataset):
                 if prompt_length < labels.shape[-1]:
                     labels[:, :prompt_length] = -100
                     
-                    # Debug: Check if we have any non-masked tokens
+                    # Check if we have any non-masked tokens
                     non_masked_tokens = (labels != -100).sum().item()
-                    if len(self.examples) < 3:  # Debug first few examples
-                        logger.info(f"Example {len(self.examples)+1}: prompt_len={prompt_length}, total_len={labels.shape[-1]}, learning_tokens={non_masked_tokens}")
-                        logger.info(f"  Prompt: '{prompt}'")
-                        logger.info(f"  Target: '{target}'")
                     
                     if non_masked_tokens > 0:  # Only add if there are tokens to learn from
                         self.examples.append({
@@ -104,6 +100,86 @@ class QwenTypoDataset(Dataset):
         return self.examples[idx]
 
 # Using standard Trainer for simplicity and memory efficiency
+
+def test_model_accuracy(model, tokenizer, eval_dataset, num_samples=20):
+    """Test the model's accuracy on a sample of examples."""
+    model.eval()
+    
+    # Get sample indices
+    total_examples = len(eval_dataset)
+    if hasattr(eval_dataset, 'dataset'):  # Subset
+        original_examples = eval_dataset.dataset.examples
+        sample_indices = random.sample(eval_dataset.indices, min(num_samples, len(eval_dataset.indices)))
+        test_examples = [original_examples[i] for i in sample_indices]
+    else:  # Direct dataset
+        sample_indices = random.sample(range(total_examples), min(num_samples, total_examples))
+        test_examples = [eval_dataset.examples[i] for i in sample_indices]
+    
+    correct = 0
+    total = 0
+    
+    with torch.no_grad():
+        for i, example_data in enumerate(test_examples):
+            # Reconstruct the prompt from the stored data
+            # We need to reverse-engineer the original prompt and target
+            input_ids = example_data['input_ids']
+            labels = example_data['labels']
+            
+            # Find where labels start (not -100)
+            non_masked = labels != -100
+            if not non_masked.any():
+                continue
+                
+            # Decode the input to get the prompt part
+            full_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+            
+            # Split on newline to separate prompt and target
+            if '\n' in full_text:
+                prompt_part = full_text.split('\n')[0]
+                expected_target = full_text.split('\n', 1)[1].strip()
+            else:
+                continue
+            
+            # Generate with the model
+            prompt_inputs = tokenizer(
+                prompt_part,
+                return_tensors='pt',
+                truncation=True,
+                max_length=64
+            ).to(model.device)
+            
+            try:
+                outputs = model.generate(
+                    **prompt_inputs,
+                    max_new_tokens=50,
+                    do_sample=False,
+                    pad_token_id=tokenizer.eos_token_id,
+                    eos_token_id=tokenizer.eos_token_id,
+                )
+                
+                # Decode generated text (skip prompt)
+                generated_text = tokenizer.decode(
+                    outputs[0][prompt_inputs['input_ids'].shape[-1]:], 
+                    skip_special_tokens=True
+                ).strip()
+                
+                # Compare with expected (normalized)
+                pred_normalized = ' '.join(generated_text.lower().split())
+                expected_normalized = ' '.join(expected_target.lower().split())
+                
+                if pred_normalized == expected_normalized:
+                    correct += 1
+                elif i < 3:  # Show first few examples
+                    logger.info(f"❌ Example {i+1}: '{prompt_part}' → '{generated_text}' (expected: '{expected_target}')")
+                
+                total += 1
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Error testing example {i+1}: {e}")
+                continue
+    
+    model.train()
+    return correct / total if total > 0 else 0.0
 
 def setup_model_tokenizer(model_name: str):
     """Setup model and tokenizer for RTX 5090."""
@@ -315,7 +391,10 @@ def main():
         
         # Final evaluation
         final_metrics = trainer.evaluate()
-        final_accuracy = final_metrics.get('eval_sentence_accuracy', 0.0)
+        
+        # Quick accuracy test on a few examples
+        logger.info("🧪 Testing model accuracy on sample examples...")
+        final_accuracy = test_model_accuracy(model, tokenizer, eval_dataset)
         
         logger.info(f"🎯 Final accuracy: {final_accuracy:.1%}")
         
