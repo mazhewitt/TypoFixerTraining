@@ -19,42 +19,59 @@ from tqdm import tqdm
 import numpy as np
 from difflib import SequenceMatcher
 from typo_correction import TypoCorrector
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from simple_two_stage import SimpleTypoCorrector
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class MLMTypoValidator:
-    def __init__(self, model_dir: str):
-        """Initialize validator with trained MLM model using the new TypoCorrector."""
+    def __init__(self, model_dir: str, use_two_stage: bool = False):
+        """Initialize validator with trained MLM model using the new TypoCorrector or SimpleTypoCorrector."""
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.use_two_stage = use_two_stage
         
-        logger.info(f"Loading model from {model_dir}")
-        self.tokenizer = DistilBertTokenizer.from_pretrained(model_dir)
-        self.model = DistilBertForMaskedLM.from_pretrained(model_dir)
-        
-        # Initialize the new TypoCorrector with optimized parameters for validation
-        self.corrector = TypoCorrector(
-            model=self.model,
-            tokenizer=self.tokenizer,
-            low_prob_threshold=-4.0,  # More sensitive for fine-tuned models
-            edit_penalty_lambda=1.0,  # Lower penalty for more corrections
-            top_k=8,
-            max_passes=2,  # Fewer passes for faster validation
-            device=str(self.device)
-        )
-        
-        logger.info(f"Model loaded on {self.device} with TypoCorrector")
+        if use_two_stage:
+            # Use the simple two-stage approach
+            logger.info("Using SimpleTypoCorrector (spell checker + MLM)")
+            self.corrector = SimpleTypoCorrector(model_path="distilbert-base-uncased")
+        else:
+            # Use the original TypoCorrector approach
+            logger.info(f"Loading model from {model_dir}")
+            self.tokenizer = DistilBertTokenizer.from_pretrained(model_dir)
+            self.model = DistilBertForMaskedLM.from_pretrained(model_dir)
+            
+            # Initialize the new TypoCorrector with optimized parameters for validation
+            self.corrector = TypoCorrector(
+                model=self.model,
+                tokenizer=self.tokenizer,
+                low_prob_threshold=-4.0,  # More sensitive for fine-tuned models
+                edit_penalty_lambda=1.0,  # Lower penalty for more corrections
+                top_k=8,
+                max_passes=2,  # Fewer passes for faster validation
+                device=str(self.device)
+            )
+            
+            logger.info(f"Model loaded on {self.device} with TypoCorrector")
     
     
     def correct_text_mlm(self, corrupted_text: str, max_length: int = 128) -> str:
-        """Correct text using the new TypoCorrector algorithm."""
-        corrected_text, stats = self.corrector.correct_typos(corrupted_text)
+        """Correct text using the selected correction algorithm."""
+        if self.use_two_stage:
+            corrected_text, stats = self.corrector.correct_text(corrupted_text)
+        else:
+            corrected_text, stats = self.corrector.correct_typos(corrupted_text)
         
         # Log correction stats for debugging
         if stats['total_corrections'] > 0:
-            logger.debug(f"Corrections made: {stats['total_corrections']} in {stats['passes_used']} passes")
+            logger.debug(f"Corrections made: {stats['total_corrections']}")
             for correction in stats['corrections_made']:
-                logger.debug(f"  '{correction['original']}' -> '{correction['corrected']}' (score: {correction['score']:.2f})")
+                if self.use_two_stage:
+                    logger.debug(f"  '{correction['original']}' -> '{correction['corrected']}' (score: {correction['score']:.2f})")
+                else:
+                    logger.debug(f"  '{correction['original']}' -> '{correction['corrected']}' (score: {correction['score']:.2f})")
         
         return corrected_text
     
@@ -152,8 +169,8 @@ class MLMTypoValidator:
 
 def main():
     parser = argparse.ArgumentParser(description="MLM-based validation for DistilBERT typo correction")
-    parser.add_argument('--model_dir', type=str, required=True,
-                       help='Directory containing trained model')
+    parser.add_argument('--model_dir', type=str, default='distilbert-base-uncased',
+                       help='Directory containing trained model (ignored for two-stage)')
     parser.add_argument('--test_file', type=str,
                        help='JSONL file with test examples')
     parser.add_argument('--max_samples', type=int, default=100,
@@ -168,7 +185,7 @@ def main():
     logger.info("🎯 Starting MLM-based validation...")
     
     # Initialize validator
-    validator = MLMTypoValidator(args.model_dir)
+    validator = MLMTypoValidator(args.model_dir, use_two_stage=True)
     
     # Prepare test cases
     if args.test_file:
