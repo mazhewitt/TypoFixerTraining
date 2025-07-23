@@ -171,7 +171,7 @@ def setup_model_tokenizer(model_name: str):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         trust_remote_code=True,
-        torch_dtype=torch.float16,  # Use FP16 for memory efficiency (16GB VRAM)
+        torch_dtype=torch.bfloat16,  # Use BF16 - more stable than FP16
         device_map="auto",
         low_cpu_mem_usage=True,
         # attn_implementation="flash_attention_2",  # Disabled to save memory
@@ -296,11 +296,10 @@ def main():
         greater_is_better=True,
         
         # Memory optimizations for RTX 5070 Ti (16GB each)
-        fp16=True,  # Use FP16 for better memory efficiency
+        bf16=True,  # Use BF16 - more stable than FP16
         dataloader_pin_memory=False,  # Disabled to save memory
         dataloader_num_workers=4,  # Reduced workers to save memory
         gradient_checkpointing=True,  # Essential for memory saving
-        max_grad_norm=1.0,  # Gradient clipping
         ddp_find_unused_parameters=False,  # Optimize for multi-GPU
         
         # Logging
@@ -331,7 +330,7 @@ def main():
     # Training info
     logger.info(f"\n📋 Memory-Optimized Training Plan:")
     logger.info(f"   GPUs: 2x RTX 5070 Ti (16GB each)")
-    logger.info(f"   Precision: FP16 (memory optimized)")
+    logger.info(f"   Precision: BF16 (stable mixed precision)")
     logger.info(f"   Sequence length: {args.max_seq_len} tokens")
     logger.info(f"   Batch size: {args.batch_size} per GPU")
     logger.info(f"   Effective batch: {effective_batch_size}")
@@ -385,7 +384,7 @@ def main():
             "target_accuracy": args.target_accuracy,
             "target_achieved": final_accuracy >= args.target_accuracy,
             "gpu": "2x RTX 5070 Ti (memory optimized)",
-            "optimizations": ["FP16", "Gradient Checkpointing", "Small Batches"],
+            "optimizations": ["BF16", "Gradient Checkpointing", "Small Batches"],
             "total_steps": total_steps,
         }
         
