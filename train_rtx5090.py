@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class QwenTypoDataset(Dataset):
     """Optimized dataset for RTX 5090 training."""
     
-    def __init__(self, data_file: str, tokenizer, max_length: int = 256):
+    def __init__(self, data_file: str, tokenizer, max_length: int = 128):  # Reduced for memory
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.examples = []
@@ -45,8 +45,8 @@ class QwenTypoDataset(Dataset):
             for line in tqdm(f, desc="Loading examples"):
                 data = json.loads(line.strip())
                 
-                # Format as instruction-following prompt
-                prompt = f"Correct the typos: {data['corrupted']}"
+                # Format as instruction-following prompt (shorter for memory)
+                prompt = f"Fix: {data['corrupted']}"
                 target = data['clean']
                 
                 # Create full training text with clear separator
@@ -167,13 +167,14 @@ def setup_model_tokenizer(model_name: str):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    # Load model with optimizations
+    # Load model with memory optimizations for RTX 5070 Ti
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         trust_remote_code=True,
-        torch_dtype=torch.bfloat16,  # Better than fp16 on RTX 5090
+        torch_dtype=torch.float16,  # Use FP16 for memory efficiency (16GB VRAM)
         device_map="auto",
-        attn_implementation="flash_attention_2",  # Use Flash Attention
+        low_cpu_mem_usage=True,
+        # attn_implementation="flash_attention_2",  # Disabled to save memory
     )
     
     # Resize embeddings if needed
@@ -211,21 +212,21 @@ def main():
                        help='HuggingFace repo to push to (username/repo)')
     
     # RTX 5090 optimized parameters
-    parser.add_argument('--max_seq_len', type=int, default=256,
-                       help='Max sequence length')
-    parser.add_argument('--batch_size', type=int, default=16,
-                       help='Per-device batch size (RTX 5090 can handle large batches)')
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=2,
-                       help='Gradient accumulation')
+    parser.add_argument('--max_seq_len', type=int, default=128,
+                       help='Max sequence length (reduced for 16GB VRAM)')
+    parser.add_argument('--batch_size', type=int, default=4,
+                       help='Per-device batch size (reduced for RTX 5070 Ti 16GB)')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=8,
+                       help='Gradient accumulation (increased to maintain effective batch size)')
     parser.add_argument('--learning_rate', type=float, default=2e-5,
                        help='Learning rate')
     parser.add_argument('--num_epochs', type=int, default=3,
                        help='Training epochs')
     parser.add_argument('--warmup_ratio', type=float, default=0.03,
                        help='Warmup ratio')
-    parser.add_argument('--save_steps', type=int, default=100,
+    parser.add_argument('--save_steps', type=int, default=50,
                        help='Save every N steps')
-    parser.add_argument('--eval_steps', type=int, default=100,
+    parser.add_argument('--eval_steps', type=int, default=50,
                        help='Eval every N steps')
     parser.add_argument('--logging_steps', type=int, default=10,
                        help='Log every N steps')
@@ -236,13 +237,16 @@ def main():
     
     args = parser.parse_args()
     
+    # Set memory optimization environment variables
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+    
     # Set seed
     set_seed(42)
     
     logger.info("🚀 Dual RTX 5070 Ti Qwen Typo Correction Training")
     logger.info(f"📁 Output: {args.output_dir}")
     logger.info(f"🎯 Target accuracy: {args.target_accuracy:.1%}")
-    logger.info(f"⚡ Dual RTX 5070 Ti optimizations enabled (32GB total VRAM)")
+    logger.info(f"💾 Memory-optimized for RTX 5070 Ti (16GB each)")
     
     # Create output directory
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
@@ -257,8 +261,8 @@ def main():
     logger.info(f"📊 Train: {len(train_dataset):,} examples")
     logger.info(f"📊 Eval: {len(eval_dataset):,} examples")
     
-    # Calculate training parameters
-    effective_batch_size = args.batch_size * args.gradient_accumulation_steps
+    # Calculate training parameters (dual GPU)
+    effective_batch_size = args.batch_size * args.gradient_accumulation_steps * 2  # 2 GPUs
     total_steps = len(train_dataset) // effective_batch_size * args.num_epochs
     
     logger.info(f"📊 Effective batch size: {effective_batch_size}")
@@ -286,17 +290,17 @@ def main():
         eval_steps=args.eval_steps,
         save_strategy="steps",
         save_steps=args.save_steps,
-        save_total_limit=3,
+        save_total_limit=2,  # Reduced to save disk space
         load_best_model_at_end=True,
         metric_for_best_model="eval_sentence_accuracy",
         greater_is_better=True,
         
-        # Dual RTX 5070 Ti performance optimizations
-        bf16=True,  # Use bfloat16 instead of fp16
-        tf32=True,  # Enable TF32 for even better performance
-        dataloader_pin_memory=True,
-        dataloader_num_workers=16,  # More workers for dual GPU setup
-        gradient_checkpointing=True,  # Save memory for larger batches
+        # Memory optimizations for RTX 5070 Ti (16GB each)
+        fp16=True,  # Use FP16 for better memory efficiency
+        dataloader_pin_memory=False,  # Disabled to save memory
+        dataloader_num_workers=4,  # Reduced workers to save memory
+        gradient_checkpointing=True,  # Essential for memory saving
+        max_grad_norm=1.0,  # Gradient clipping
         ddp_find_unused_parameters=False,  # Optimize for multi-GPU
         
         # Logging
@@ -306,7 +310,7 @@ def main():
         
         # Other optimizations
         remove_unused_columns=False,
-        prediction_loss_only=False,
+        prediction_loss_only=True,  # Faster evaluation, saves memory
         include_inputs_for_metrics=False,
         
         # Disable wandb by default
@@ -325,22 +329,27 @@ def main():
     )
     
     # Training info
-    logger.info(f"\n📋 Dual RTX 5070 Ti Training Plan:")
-    logger.info(f"   GPUs: 2x RTX 5070 Ti (32GB total VRAM)")
-    logger.info(f"   Precision: BFloat16 + TF32")
-    logger.info(f"   Flash Attention 2: Enabled")
-    logger.info(f"   Batch size: {args.batch_size} x {args.gradient_accumulation_steps} = {effective_batch_size}")
-    logger.info(f"   Data workers: 16 (optimized for dual GPU)")
+    logger.info(f"\n📋 Memory-Optimized Training Plan:")
+    logger.info(f"   GPUs: 2x RTX 5070 Ti (16GB each)")
+    logger.info(f"   Precision: FP16 (memory optimized)")
+    logger.info(f"   Sequence length: {args.max_seq_len} tokens")
+    logger.info(f"   Batch size: {args.batch_size} per GPU")
+    logger.info(f"   Effective batch: {effective_batch_size}")
+    logger.info(f"   Gradient accumulation: {args.gradient_accumulation_steps}")
+    logger.info(f"   Data workers: 4 (memory optimized)")
     logger.info(f"   Total steps: {total_steps:,}")
     logger.info(f"   Eval every: {args.eval_steps} steps")
     logger.info(f"   Save every: {args.save_steps} steps")
     
-    # Estimate training time on dual RTX 5070 Ti
-    estimated_time_min = total_steps * 0.4 / 60  # ~0.4 sec per step estimate (faster with 2 GPUs)
+    # Estimate training time with smaller batches
+    estimated_time_min = total_steps * 0.6 / 60  # ~0.6 sec per step with smaller batches
     logger.info(f"   Estimated time: {estimated_time_min:.1f} minutes")
     
+    # Clear cache before training
+    torch.cuda.empty_cache()
+    
     # Start training
-    logger.info("\n🚀 Starting dual RTX 5070 Ti training...")
+    logger.info("\n🚀 Starting memory-optimized training...")
     start_time = time.time()
     
     try:
@@ -375,8 +384,8 @@ def main():
             "final_accuracy": final_accuracy,
             "target_accuracy": args.target_accuracy,
             "target_achieved": final_accuracy >= args.target_accuracy,
-            "gpu": "2x RTX 5070 Ti",
-            "optimizations": ["BFloat16", "TF32", "Flash Attention 2"],
+            "gpu": "2x RTX 5070 Ti (memory optimized)",
+            "optimizations": ["FP16", "Gradient Checkpointing", "Small Batches"],
             "total_steps": total_steps,
         }
         
