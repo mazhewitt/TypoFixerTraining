@@ -374,7 +374,7 @@ def main():
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,  # Lower loss is better
-        early_stopping_patience=args.early_stopping_patience,  # Configurable early stopping
+        # early_stopping_patience handled by EarlyStoppingCallback
         
         # Memory optimizations for RTX 5070 Ti (16GB each)
         bf16=True,  # Use BF16 - more stable than FP16

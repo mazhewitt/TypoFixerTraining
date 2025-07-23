@@ -17,7 +17,8 @@
 ./setup_rtx5090.sh
 
 # Generate LARGE dataset separately (more reliable, prevents threading crashes)
-python3 generate_large_dataset.py
+python3 src/realistic_data_generation.py --output
+  data/enhanced_training_large.jsonl --num_examples 40000 --corruption_rate 0.15
 ```
 
 ### 2. Verify Dual RTX 5070 Ti Setup
