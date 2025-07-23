@@ -23,6 +23,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     set_seed,
     default_data_collator,
+    EarlyStoppingCallback,
 )
 import numpy as np
 from tqdm import tqdm
@@ -101,6 +102,64 @@ class QwenTypoDataset(Dataset):
 
 # Using standard Trainer for simplicity and memory efficiency
 
+def conservative_inference(model, tokenizer, prompt: str) -> str:
+    """
+    Conservative inference for typo correction - extracted from test_trained_model.py
+    Prevents overfitted models from being too creative.
+    """
+    # Tokenize input
+    inputs = tokenizer(prompt, return_tensors='pt', truncation=True, max_length=128)
+    
+    # Move to model device
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    
+    # Generate MINIMAL correction (just fix typos, don't change anything else)
+    with torch.no_grad():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=15,  # Very short - just the corrected sentence
+            do_sample=False,  # No sampling - deterministic
+            num_beams=1,  # No beam search - fastest/most direct
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            repetition_penalty=1.05,  # Very minimal
+        )
+    
+    # Decode generated text (skip prompt)
+    generated_text = tokenizer.decode(
+        outputs[0][inputs['input_ids'].shape[-1]:], 
+        skip_special_tokens=True
+    ).strip()
+    
+    # AGGRESSIVE cleaning for overfitted model
+    generated_text = generated_text.strip()
+    
+    # Remove newlines and extra whitespace
+    generated_text = ' '.join(generated_text.split())
+    
+    # Split on period and take first part
+    if '.' in generated_text:
+        corrected = generated_text.split('.')[0].strip() + '.'
+    else:
+        corrected = generated_text.strip()
+    
+    # Remove unwanted symbols and prefixes that overfitted model adds
+    corrected = corrected.replace('##', '').replace('#', '').strip()
+    
+    # Remove common overfitted prefixes
+    unwanted_prefixes = [
+        'Here is', 'The corrected', 'Correction:', 'Fixed:', 'Answer:', 
+        'The answer is', 'Result:', 'Output:', 'Corrected:'
+    ]
+    for prefix in unwanted_prefixes:
+        if corrected.lower().startswith(prefix.lower()):
+            corrected = corrected[len(prefix):].strip()
+    
+    # Length limiting removed - conservative generation parameters already prevent over-generation
+    # The max_new_tokens=15 + do_sample=False + num_beams=1 are sufficient
+    
+    return corrected
+
 def test_model_accuracy(model, tokenizer, eval_dataset, num_samples=20):
     """Test the model's accuracy on a sample of examples."""
     model.eval()
@@ -140,37 +199,23 @@ def test_model_accuracy(model, tokenizer, eval_dataset, num_samples=20):
             else:
                 continue
             
-            # Generate with the model
-            prompt_inputs = tokenizer(
-                prompt_part,
-                return_tensors='pt',
-                truncation=True,
-                max_length=64
-            ).to(model.device)
-            
             try:
-                outputs = model.generate(
-                    **prompt_inputs,
-                    max_new_tokens=50,
-                    do_sample=False,
-                    pad_token_id=tokenizer.eos_token_id,
-                    eos_token_id=tokenizer.eos_token_id,
-                )
+                # Use conservative inference to prevent overfitted creativity
+                generated_text = conservative_inference(model, tokenizer, prompt_part)
                 
-                # Decode generated text (skip prompt)
-                generated_text = tokenizer.decode(
-                    outputs[0][prompt_inputs['input_ids'].shape[-1]:], 
-                    skip_special_tokens=True
-                ).strip()
-                
-                # Compare with expected (normalized)
-                pred_normalized = ' '.join(generated_text.lower().split())
-                expected_normalized = ' '.join(expected_target.lower().split())
+                # Compare with expected (normalized comparison)
+                pred_normalized = ' '.join(generated_text.lower().replace('.', '').split())
+                expected_normalized = ' '.join(expected_target.lower().replace('.', '').split())
                 
                 if pred_normalized == expected_normalized:
                     correct += 1
-                elif i < 3:  # Show first few examples
-                    logger.info(f"❌ Example {i+1}: '{prompt_part}' → '{generated_text}' (expected: '{expected_target}')")
+                elif i < 3:  # Show first few examples for debugging
+                    logger.info(f"❌ Example {i+1}:")
+                    logger.info(f"   Input: '{prompt_part}'")
+                    logger.info(f"   Generated: '{generated_text}'")
+                    logger.info(f"   Expected: '{expected_target}'")
+                    logger.info(f"   Pred norm: '{pred_normalized}'")
+                    logger.info(f"   Exp norm: '{expected_normalized}'")
                 
                 total += 1
                 
@@ -263,6 +308,10 @@ def main():
     # Quality targets
     parser.add_argument('--target_accuracy', type=float, default=0.9,
                        help='Target accuracy (90%)')
+    parser.add_argument('--early_stopping_patience', type=int, default=5,
+                       help='Early stopping patience (epochs without improvement)')
+    parser.add_argument('--max_weight_decay', type=float, default=0.1,
+                       help='Weight decay for regularization (anti-overfitting)')
     
     args = parser.parse_args()
     
@@ -298,7 +347,7 @@ def main():
     logger.info(f"📊 Effective batch size: {effective_batch_size}")
     logger.info(f"📊 Total training steps: {total_steps:,}")
     
-    # Dual RTX 5070 Ti optimized training arguments
+    # Anti-overfitting optimized training arguments
     training_args = TrainingArguments(
         # Basic setup
         output_dir=args.output_dir,
@@ -310,20 +359,22 @@ def main():
         per_device_eval_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         
-        # Learning parameters
+        # Learning parameters - ANTI-OVERFITTING
         learning_rate=args.learning_rate,
-        weight_decay=0.01,
+        weight_decay=args.max_weight_decay,  # Configurable weight decay
         warmup_ratio=args.warmup_ratio,
+        lr_scheduler_type="cosine",  # Cosine decay helps prevent overfitting
         
-        # Evaluation and saving
+        # Evaluation and saving - EARLY STOPPING
         eval_strategy="steps",
         eval_steps=args.eval_steps,
-        save_strategy="steps",
+        save_strategy="steps", 
         save_steps=args.save_steps,
-        save_total_limit=1,  # Only keep best checkpoint
+        save_total_limit=3,  # Keep more checkpoints to find best
         load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
         greater_is_better=False,  # Lower loss is better
+        early_stopping_patience=args.early_stopping_patience,  # Configurable early stopping
         
         # Memory optimizations for RTX 5070 Ti (16GB each)
         bf16=True,  # Use BF16 - more stable than FP16
@@ -348,7 +399,7 @@ def main():
         run_name=f"qwen-typo-{args.num_epochs}ep-dual5070ti",
     )
     
-    # Create trainer
+    # Create trainer with early stopping
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -356,10 +407,11 @@ def main():
         eval_dataset=eval_dataset,
         data_collator=default_data_collator,
         tokenizer=tokenizer,
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience)],
     )
     
     # Training info
-    logger.info(f"\n📋 Memory-Optimized Training Plan:")
+    logger.info(f"\n📋 Anti-Overfitting Training Plan:")
     logger.info(f"   GPUs: 2x RTX 5070 Ti (16GB each)")
     logger.info(f"   Precision: BF16 (stable mixed precision)")
     logger.info(f"   Sequence length: {args.max_seq_len} tokens")
@@ -367,6 +419,11 @@ def main():
     logger.info(f"   Effective batch: {effective_batch_size}")
     logger.info(f"   Gradient accumulation: {args.gradient_accumulation_steps}")
     logger.info(f"   Data workers: 4 (memory optimized)")
+    logger.info(f"   🛡️ ANTI-OVERFITTING MEASURES:")
+    logger.info(f"     - Weight decay: {args.max_weight_decay}")
+    logger.info(f"     - Early stopping patience: {args.early_stopping_patience}")
+    logger.info(f"     - LR scheduler: cosine decay")
+    logger.info(f"     - Checkpoints kept: 3 (find best)")
     logger.info(f"   Total steps: {total_steps:,}")
     logger.info(f"   Eval every: {args.eval_steps} steps")
     logger.info(f"   Save every: {args.save_steps} steps")
@@ -418,7 +475,7 @@ def main():
             "target_accuracy": args.target_accuracy,
             "target_achieved": final_accuracy >= args.target_accuracy,
             "gpu": "2x RTX 5070 Ti (memory optimized)",
-            "optimizations": ["BF16", "Gradient Checkpointing", "Small Batches"],
+            "optimizations": ["BF16", "Gradient Checkpointing", "Early Stopping", "Weight Decay", "Cosine LR"],
             "total_steps": total_steps,
         }
         

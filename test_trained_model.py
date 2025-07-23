@@ -38,16 +38,16 @@ def test_model(model_path):
             # Tokenize input
             inputs = tokenizer(prompt, return_tensors='pt', truncation=True, max_length=128)
             
-            # Generate correction with better stopping
+            # Generate MINIMAL correction (just fix typos, don't change anything else)
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=30,
-                do_sample=False,
+                max_new_tokens=15,  # Very short - just the corrected sentence
+                do_sample=False,  # No sampling - deterministic
+                num_beams=1,  # No beam search - fastest/most direct
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
-                repetition_penalty=1.2,  # Prevent repetition
-                early_stopping=True,
-                no_repeat_ngram_size=3,  # Prevent 3-gram repetition
+                repetition_penalty=1.05,  # Very minimal
+                bad_words_ids=None,  # Allow all words
             )
             
             # Decode generated text (skip prompt)
@@ -56,19 +56,37 @@ def test_model(model_path):
                 skip_special_tokens=True
             ).strip()
             
-            # Extract just the first sentence (before any repetition)
-            if '. ' in generated_text:
-                corrected = generated_text.split('. ')[0] + '.'
-            elif '.' in generated_text:
-                corrected = generated_text.split('.')[0] + '.'
+            # AGGRESSIVE cleaning for overfitted model
+            generated_text = generated_text.strip()
+            
+            # Remove newlines and extra whitespace
+            generated_text = ' '.join(generated_text.split())
+            
+            # Split on period and take first part
+            if '.' in generated_text:
+                corrected = generated_text.split('.')[0].strip() + '.'
             else:
-                corrected = generated_text.split()[0:20]  # First 20 words max
-                corrected = ' '.join(corrected)
+                corrected = generated_text.strip()
+            
+            # Remove unwanted symbols and prefixes that overfitted model adds
+            corrected = corrected.replace('##', '').replace('#', '').strip()
+            
+            # Remove common overfitted prefixes
+            unwanted_prefixes = [
+                'Here is', 'The corrected', 'Correction:', 'Fixed:', 'Answer:', 
+                'The answer is', 'Result:', 'Output:', 'Corrected:'
+            ]
+            for prefix in unwanted_prefixes:
+                if corrected.lower().startswith(prefix.lower()):
+                    corrected = corrected[len(prefix):].strip()
+            
+            # Length limiting removed - the conservative generation parameters handle this
+            # max_new_tokens=15 + deterministic generation prevent over-generation
             
             print(f"{i}. Input:  {prompt}")
             print(f"   Output: {corrected}")
             print()
 
 if __name__ == "__main__":
-    model_path = "models/qwen-typo-fixer-debug"  # Update this path
+    model_path = "mazhewitt/qwen-typo-fixer"  # HuggingFace uploaded model
     test_model(model_path)

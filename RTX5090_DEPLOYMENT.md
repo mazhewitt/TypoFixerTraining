@@ -1,6 +1,11 @@
-# RTX 5090 Deployment Guide
+# RTX 5070 Ti Deployment Guide (Anti-Overfitting)
 
-## Quick Setup on Your RTX 5090 Instance
+## 🛡️ UPDATED: Large Dataset Training to Prevent Overfitting
+
+**ISSUE IDENTIFIED**: Previous 7K dataset caused severe overfitting (loss → 0 in 4 minutes)
+**SOLUTION**: Scale to 50K+ examples for proper generalization
+
+## Quick Setup on Your Dual RTX 5070 Ti Instance
 
 ### 1. Clone and Setup Environment
 ```bash
@@ -8,85 +13,98 @@
 git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
 cd TypoFixerTraining
 
-# Run RTX 5090 setup (uses global Python packages)
+# Run setup with LARGE dataset generation (takes 10-15 minutes)
 ./setup_rtx5090.sh
 ```
 
-### 2. Verify RTX 5090 Setup
+### 2. Verify Dual RTX 5070 Ti Setup
 ```bash
-# Check GPU
+# Check both GPUs
 nvidia-smi
 
-# Verify PyTorch CUDA
-python3 -c "import torch; print(f'GPU: {torch.cuda.get_device_name(0)}'); print(f'Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f}GB')"
+# Verify PyTorch multi-GPU
+python3 -c "import torch; print(f'GPU Count: {torch.cuda.device_count()}'); [print(f'GPU {i}: {torch.cuda.get_device_name(i)} ({torch.cuda.get_device_properties(i).total_memory / 1e9:.1f}GB)') for i in range(torch.cuda.device_count())]"
 ```
 
-### 3. Start Training (Optimized for RTX 5090)
+### 3. Start Anti-Overfitting Training 
 ```bash
-# Train with RTX 5090 optimizations
+# UPDATED: Large dataset + anti-overfitting measures
 python3 train_rtx5090.py \
-    --train_file data/enhanced_training_full.jsonl \
-    --output_dir models/qwen-typo-fixer-mem-opt \
-    --hf_repo mazhewitt/qwen-typo-fixer \
-    --batch_size 4 \
-    --gradient_accumulation_steps 8 \
-    --max_seq_len 128 \
-    --num_epochs 3
+    --train_file data/enhanced_training_large.jsonl \
+    --output_dir models/qwen-typo-fixer-v2 \
+    --hf_repo mazhewitt/qwen-typo-fixer-v2 \
+    --num_epochs 5 \
+    --early_stopping_patience 3 \
+    --max_weight_decay 0.1 \
+    --eval_steps 50
 ```
 
-### 4. Monitor Training
-The training will show:
-- Real-time loss and accuracy
-- GPU utilization
-- Estimated time remaining
-- Memory usage
+### 4. Monitor Training Progress
+🎯 **ANTI-OVERFITTING INDICATORS TO WATCH:**
+```
+✅ GOOD SIGNS:
+- Training loss: 2.0 → 0.3 (gradual decrease)
+- Validation loss: 2.1 → 0.4 (follows training)
+- Gap stays small: <0.2 difference
+- Early stopping activates before epoch 5
 
-Expected training time: **~15-20 minutes** on RTX 5090
+❌ OVERFITTING SIGNS:
+- Training loss → 0.0 (too perfect)
+- Validation loss increases while training decreases
+- Large gap: >0.5 difference
+- Training completes in <10 minutes
+```
+
+**Expected training time**: **30-45 minutes** (10x longer than before - this is GOOD!)
 
 ### 5. Upload to HuggingFace
 ```bash
 # Login to HuggingFace
 huggingface-cli login
 
-# Upload model (automatic after training completes)
-cd models/qwen-typo-fixer-rtx5090
-huggingface-cli upload . mazhewitt/qwen-typo-fixer
+# Upload improved model (automatic after training completes)
+cd models/qwen-typo-fixer-v2
+huggingface-cli upload . mazhewitt/qwen-typo-fixer-v2
 ```
 
-## RTX 5090 Optimizations Applied
+## 🛡️ Anti-Overfitting Optimizations Applied
 
-### Hardware Optimizations
-- ✅ **BFloat16**: Better precision than FP16 on RTX 5090
-- ✅ **TensorFloat-32**: Enabled for maximum performance
-- ✅ **Flash Attention 2**: Memory-efficient attention mechanism
-- ✅ **Large Batch Sizes**: Utilizing 32GB VRAM effectively
-- ✅ **8 Data Workers**: Parallel data loading
+### Dataset Scaling (CRITICAL)
+- ✅ **50K Examples**: 7x larger dataset prevents memorization
+- ✅ **Multi-Source**: Norvig, Holbrook, Wikipedia, keyboard errors
+- ✅ **Diverse Patterns**: Real-world typo distributions
+- ✅ **Generation Time**: 10-15 minutes (worth the wait!)
 
-### Memory Management
-- ✅ **Gradient Checkpointing**: Saves memory for larger batches
-- ✅ **Pin Memory**: Faster CPU-GPU transfers
-- ✅ **Optimized Batch Size**: 24 samples per device (48 effective)
+### Training Optimizations
+- ✅ **Early Stopping**: Stops when validation plateaus
+- ✅ **Weight Decay**: 0.1 regularization prevents overfitting
+- ✅ **Cosine LR Decay**: Gradual learning rate reduction
+- ✅ **BFloat16**: Stable mixed precision
+- ✅ **Multiple Checkpoints**: Keeps 3 best models
 
-### Performance Expectations
-- **Training Speed**: ~0.5 seconds per step
-- **Total Time**: 15-20 minutes for 3 epochs
-- **Memory Usage**: ~28GB VRAM (95% utilization)
-- **Target Accuracy**: 90%+ sentence accuracy
+### Performance Expectations (UPDATED)
+- **Dataset Size**: 50,000 examples (vs 7K before)
+- **Training Speed**: ~0.8 seconds per step (more data = slower)
+- **Total Time**: 30-45 minutes for 5 epochs
+- **Memory Usage**: ~14GB VRAM per GPU (well within 16GB limit)
+- **Target**: 90%+ accuracy WITH generalization
 
-## Training Data Summary
+## Training Data Summary (SCALED UP)
 
-Your enhanced dataset includes:
-- **6,999 examples** from multiple high-quality sources
+Your LARGE enhanced dataset includes:
+- **50,000 examples** from multiple high-quality sources (7x increase!)
 - **Norvig's 20k misspellings** from Google spellcheck logs
 - **Academic datasets** (Holbrook/Birkbeck)
 - **Wikipedia typo corrections** from revision history
-- **Enhanced keyboard errors** with realistic patterns
+- **Enhanced keyboard errors** with realistic QWERTY patterns
+- **Natural sentences** from WikiText (not artificial concatenations)
 
-## Model Performance Target
+## Model Performance Target (REALISTIC)
 
-- **Baseline Qwen**: 0% accuracy (needs fine-tuning)
-- **Target**: 90% sentence accuracy
-- **Expected**: 92-95% with this enhanced dataset
+- **Previous Model**: 100% accuracy on training data (OVERFITTED - bad!)
+- **New Target**: 90% sentence accuracy on UNSEEN data (GENERALIZED - good!)
+- **Expected with 50K dataset**: 88-93% with proper generalization
+- **Key Success Metric**: Performance on validation set, not training set
 
 ## After Training
 

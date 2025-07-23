@@ -48,23 +48,33 @@ echo "export CUDA_VISIBLE_DEVICES=0,1" >> ~/.bashrc
 echo "export TORCH_CUDA_ARCH_LIST=\"8.9\"" >> ~/.bashrc
 echo "export TOKENIZERS_PARALLELISM=false" >> ~/.bashrc
 
-# Generate dataset if not present
-echo "📊 Checking for training data..."
-if [ ! -f "data/enhanced_training_full.jsonl" ]; then
-    echo "🔄 Generating enhanced training dataset..."
+# Generate large dataset for proper training (prevents overfitting)
+echo "📊 Checking for large training dataset..."
+if [ ! -f "data/enhanced_training_large.jsonl" ]; then
+    echo "🔄 Generating LARGE enhanced training dataset (50K examples)..."
+    echo "⏱️ This will take 10-15 minutes but prevents overfitting..."
     mkdir -p data
     python3 src/realistic_data_generation.py \
-        --output data/enhanced_training_full.jsonl \
-        --num_examples 7000 \
+        --output data/enhanced_training_large.jsonl \
+        --num_examples 50000 \
         --corruption_rate 0.15
+    echo "✅ Large dataset generated: $(wc -l < data/enhanced_training_large.jsonl) examples"
+    
+    # Validate the generated dataset
+    echo "🔍 Validating dataset quality..."
+    python3 validate_dataset.py data/enhanced_training_large.jsonl
 else
-    echo "✅ Training data already exists"
+    echo "✅ Large training data already exists: $(wc -l < data/enhanced_training_large.jsonl) examples"
+    
+    # Validate existing dataset
+    echo "🔍 Validating existing dataset quality..."
+    python3 validate_dataset.py data/enhanced_training_large.jsonl
 fi
 
 echo "✅ Dual RTX 5070 Ti environment setup complete!"
 echo ""
 echo "📋 Next steps:"
-echo "1. Run training: python3 train_rtx5090.py --train_file data/enhanced_training_full.jsonl --output_dir models/qwen-typo-fixer-dual5070ti --hf_repo mazhewitt/qwen-typo-fixer"
+echo "1. Run training: python3 train_rtx5090.py --train_file data/enhanced_training_large.jsonl --output_dir models/qwen-typo-fixer-v2 --hf_repo mazhewitt/qwen-typo-fixer-v2"
 echo ""
 echo "🔧 Environment optimized for dual RTX 5070 Ti:"
 echo "   - CUDA_VISIBLE_DEVICES=0,1 (both GPUs)"
