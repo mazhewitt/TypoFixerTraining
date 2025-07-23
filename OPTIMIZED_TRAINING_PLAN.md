@@ -6,7 +6,7 @@ Based on systematic analysis and targeted improvements to reach 90%+ token accur
 
 ### **Step 1: Environment Setup**
 ```bash
-# Clone repository
+# Clone repository (HTTPS for universal compatibility)
 git clone https://github.com/mazhewitt/TypoFixerTraining.git
 cd TypoFixerTraining
 
@@ -30,18 +30,18 @@ pip install --pre torch torchvision torchaudio --index-url https://download.pyto
 ### **Step 2: Generate Improved Training Data**
 ```bash
 # Generate 100K examples with systematic improvements
-python src/data_generation_v2.py \
+python src/data_generation.py \
   --num_examples 100000 \
   --output data/improved_train_100k.jsonl \
-  --curriculum \
-  --identity_rate 0.15
+  --corruption_rate 0.15
 
 # Expected improvements:
-# ✅ 25% corruption rate (vs 15% baseline)
-# ✅ Character-level noise (adjacent swaps)  
-# ✅ Missing/extra space corruptions
-# ✅ 15% identity examples (prevents overcorrection)
-# ✅ Enhanced keyboard layouts
+# ✅ 15% corruption rate with balanced corruption types
+# ✅ Word joining corruptions (35% of corruptions): "it works" → "i tworks"
+# ✅ Character-level corruptions (35%): keyboard neighbors, drops, doubles, transpositions
+# ✅ Homophone confusions (30%): their/there/they're, your/you're, its/it's
+# ✅ Space handling improvements: proper word boundary corruption
+# ✅ Enhanced keyboard neighbor mapping for realistic typos
 ```
 
 ### **Step 3: Optimized Training**
@@ -68,14 +68,16 @@ python src/train.py \
 
 ### **Step 4: Advanced Validation**
 ```bash
-# Test with improved constrained decoding
+# Test with new TypoCorrector algorithm
 python src/validate_mlm.py --model_dir models/optimized_typo_fixer
 
 # Expected improvements:
-# ✅ Beam search (top-k=5) vs greedy decoding
-# ✅ Plausibility filtering (prevents "beutiful" → "gautiful")
-# ✅ 60% similarity threshold for corrections
-# ✅ Keyboard-aware correction validation
+# ✅ Multi-pass iterative correction (up to 2 passes for validation speed)
+# ✅ Probabilistic suspect detection using token log probabilities
+# ✅ Cartesian product evaluation for multi-token spans
+# ✅ Full context re-ranking of correction candidates
+# ✅ Edit distance penalty to prevent overcorrection
+# ✅ Low probability threshold optimized for fine-tuned models (-4.0)
 ```
 
 ---
@@ -86,9 +88,9 @@ python src/validate_mlm.py --model_dir models/optimized_typo_fixer
 |-------|---------------|------------------|
 | **Baseline (untrained)** | 71% | Raw DistilBERT |
 | **V1 (original training)** | 72% | Basic MLM on 100K examples |
-| **V2 (improved data)** | 78-80% | Higher corruption + identity examples |
-| **V3 (constrained decoding)** | 84-86% | Beam search + plausibility filtering |
-| **V4 (curriculum + tweaks)** | **88-90%** | Full optimization stack |
+| **V2 (improved data)** | 78-80% | Word joining corruption + homophone handling |
+| **V3 (TypoCorrector algorithm)** | 84-86% | Multi-pass iterative + Cartesian product spans |
+| **V4 (optimized parameters)** | **88-90%** | Full algorithm + fine-tuned thresholds |
 
 ---
 
@@ -147,10 +149,10 @@ python src/train.py \
 ### **Test Cases:**
 ```
 1. "Thi sis a test sentenc with typos" → "This is a test sentence with typos" 
-2. "The quikc brown fox jumps over teh lazy dog" → "The quick brown fox jumps over the lazy dog"
-3. "I went too the stor to buy som milk" → "I went to the store to buy some milk"
-4. "Ther are many mistaks in this sentance" → "There are many mistakes in this sentence"
-5. "Its a beutiful day outsid today" → "It's a beautiful day outside today"
+2. "The quic kbrown fox jump sover teh lazy dog" → "The quick brown fox jumps over the lazy dog"
+3. "I wen ttoo the stor to bu ysom milk" → "I went to the store to buy some milk"
+4. "Ther are man ymistaks in thi ssentance" → "There are many mistakes in this sentence"
+5. "Its a beutiful da youtside toda y" → "It's a beautiful day outside today"
 ```
 
 **Expected Results with Optimizations:**
