@@ -9,7 +9,6 @@ import json
 import random
 import argparse
 import re
-import requests
 from pathlib import Path
 from typing import List, Dict, Tuple, Set
 from datasets import load_dataset
@@ -33,147 +32,6 @@ WORD_CONFUSIONS = {
     'too': 'to', 'to': 'too', 'than': 'then', 'then': 'than',
     'affect': 'effect', 'effect': 'affect', 'lose': 'loose', 'loose': 'lose'
 }
-
-# Cache for external datasets
-_norvig_misspellings = None
-_holbrook_pairs = None
-
-def load_norvig_misspellings() -> Dict[str, str]:
-    """Load Norvig's 20k misspellings from Peter Norvig's spelling corrector."""
-    global _norvig_misspellings
-    if _norvig_misspellings is not None:
-        return _norvig_misspellings
-    
-    print("📥 Loading Norvig's 20k misspellings...")
-    _norvig_misspellings = {}
-    
-    try:
-        # Download from Peter Norvig's website
-        url = "https://norvig.com/big.txt"
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        
-        # Extract misspelling patterns from text
-        text = response.text.lower()
-        words = re.findall(r'\b[a-z]+\b', text)
-        
-        # Create common misspelling patterns based on frequency
-        word_freq = {}
-        for word in words:
-            word_freq[word] = word_freq.get(word, 0) + 1
-        
-        # Get top frequent words to create realistic misspellings
-        frequent_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:1000]
-        
-        for word, _ in frequent_words:
-            if len(word) >= 4:  # Focus on longer words
-                # Generate common misspelling patterns
-                misspellings = generate_word_misspellings(word)
-                for misspelled in misspellings:
-                    _norvig_misspellings[misspelled] = word
-                    
-    except Exception as e:
-        print(f"⚠️ Could not load Norvig data ({e}), using built-in patterns")
-        # Fallback to common patterns
-        _norvig_misspellings = {
-            'accomodate': 'accommodate', 'occured': 'occurred', 'recieve': 'receive',
-            'seperate': 'separate', 'definately': 'definitely', 'neccessary': 'necessary',
-            'begining': 'beginning', 'comming': 'coming', 'untill': 'until',
-            'sucessful': 'successful', 'occassion': 'occasion', 'priviledge': 'privilege',
-            'embarass': 'embarrass', 'millionaire': 'millionaire', 'dissapear': 'disappear',
-            'tommorrow': 'tomorrow', 'reccomend': 'recommend', 'fourty': 'forty',
-            'wierd': 'weird', 'freind': 'friend', 'beleive': 'believe',
-            'acheive': 'achieve', 'peice': 'piece', 'recieved': 'received'
-        }
-    
-    print(f"✅ Loaded {len(_norvig_misspellings)} Norvig misspelling patterns")
-    return _norvig_misspellings
-
-def generate_word_misspellings(word: str) -> List[str]:
-    """Generate realistic misspellings for a word using multiple techniques."""
-    misspellings = []
-    
-    # Double letters
-    for i in range(len(word) - 1):
-        if word[i] == word[i + 1]:  # Already doubled
-            # Remove one
-            misspelled = word[:i] + word[i + 1:]
-            misspellings.append(misspelled)
-        else:
-            # Double a consonant
-            if word[i] not in 'aeiou':
-                misspelled = word[:i + 1] + word[i] + word[i + 1:]
-                misspellings.append(misspelled)
-    
-    # ie/ei swaps
-    if 'ie' in word:
-        misspellings.append(word.replace('ie', 'ei'))
-    if 'ei' in word:
-        misspellings.append(word.replace('ei', 'ie'))
-    
-    # Drop silent letters
-    if word.endswith('e') and len(word) > 3:
-        misspellings.append(word[:-1])
-    
-    return misspellings[:3]  # Limit to avoid explosion
-
-def load_holbrook_pairs() -> List[Tuple[str, str]]:
-    """Load Holbrook/Birkbeck academic typo correction pairs."""
-    global _holbrook_pairs
-    if _holbrook_pairs is not None:
-        return _holbrook_pairs
-    
-    print("📥 Loading Holbrook/Birkbeck academic typo pairs...")
-    _holbrook_pairs = []
-    
-    # Built-in academic correction pairs from literature
-    academic_pairs = [
-        ("The qucik brown fox jumps over the lazy dog.", "The quick brown fox jumps over the lazy dog."),
-        ("I beleive this is teh correct answr.", "I believe this is the correct answer."),
-        ("She recieved her degre last year.", "She received her degree last year."),
-        ("The meeting was sucessful and very informativ.", "The meeting was successful and very informative."),
-        ("We need to seperate these items carfully.", "We need to separate these items carefully."),
-        ("The resturant serves excelent food.", "The restaurant serves excellent food."),
-        ("He is studyng for his final examintion.", "He is studying for his final examination."),
-        ("The goverment anounced new policies today.", "The government announced new policies today."),
-        ("I wrte a leter to my frend yesterday.", "I wrote a letter to my friend yesterday."),
-        ("The libary has many intresting books.", "The library has many interesting books."),
-        ("We dicussed the importnt details.", "We discussed the important details."),
-        ("The temperture is extrmely high today.", "The temperature is extremely high today."),
-        ("I acidentally deleted the wrong file.", "I accidentally deleted the wrong file."),
-        ("The comittee made an anouncement.", "The committee made an announcement."),
-        ("She perfomed exceptionaly well in the test.", "She performed exceptionally well in the test."),
-        ("The begining of the story was very excting.", "The beginning of the story was very exciting."),
-        ("We reccommend this aproach for best results.", "We recommend this approach for best results."),
-        ("The ocassion was truely memorable.", "The occasion was truly memorable."),
-        ("I definately need to imporve my skils.", "I definitely need to improve my skills."),
-        ("The experiance was both chalenging and rewardng.", "The experience was both challenging and rewarding.")
-    ]
-    
-    _holbrook_pairs = academic_pairs
-    print(f"✅ Loaded {len(_holbrook_pairs)} Holbrook/Birkbeck correction pairs")
-    return _holbrook_pairs
-
-def apply_norvig_corruption(words: List[str]) -> List[str]:
-    """Apply Norvig misspellings to words."""
-    misspellings = load_norvig_misspellings()
-    corrupted = []
-    
-    for word in words:
-        word_clean = re.sub(r'[^\w]', '', word.lower())
-        if word_clean in misspellings and random.random() < 0.3:
-            # Apply the misspelling while preserving case and punctuation
-            correct_word = misspellings[word_clean]
-            if word.isupper():
-                corrupted.append(word.replace(word_clean.upper(), correct_word.upper()))
-            elif word[0].isupper():
-                corrupted.append(word.replace(word_clean.capitalize(), correct_word.capitalize()))
-            else:
-                corrupted.append(word.replace(word_clean, correct_word))
-        else:
-            corrupted.append(word)
-    
-    return corrupted
 
 def keyboard_neighbor_swap(word: str) -> str:
     """Replace a character with keyboard neighbor."""
@@ -298,17 +156,12 @@ def word_confusion(word: str) -> str:
             return replacement
     return word
 
-def corrupt_sentence(sentence: str, corruption_rate: float = 0.15, use_external_sources: bool = True) -> str:
-    """Apply various corruptions to a sentence with realistic patterns from multiple sources."""
+def corrupt_sentence(sentence: str, corruption_rate: float = 0.15) -> str:
+    """Apply various corruptions to a sentence with realistic patterns."""
     words = sentence.split()
-    
-    # First try Norvig misspellings (20% chance for any word)
-    if use_external_sources and random.random() < 0.2:
-        words = apply_norvig_corruption(words)
-    
     corrupted_words = []
     
-    # Apply word-level corruptions and character merging
+    # First pass: Apply word-level corruptions and character merging
     i = 0
     while i < len(words):
         word = words[i]
@@ -331,23 +184,21 @@ def corrupt_sentence(sentence: str, corruption_rate: float = 0.15, use_external_
         
         # Apply regular corruptions
         if random.random() < corruption_rate:
-            # Enhanced corruption type selection with external sources
+            # Choose corruption type with realistic weights
             corruption_choice = random.random()
             
-            if corruption_choice < 0.25:  # 25% - space splitting (very common)
+            if corruption_choice < 0.3:  # 30% - space splitting (very common)
                 corrupted_word = word_space_split(word)
-            elif corruption_choice < 0.4:  # 15% - keyboard neighbors (enhanced)
-                corrupted_word = enhanced_keyboard_corruption(word)
-            elif corruption_choice < 0.55:  # 15% - character transpose
+            elif corruption_choice < 0.45:  # 15% - keyboard neighbors
+                corrupted_word = keyboard_neighbor_swap(word)
+            elif corruption_choice < 0.6:  # 15% - character transpose
                 corrupted_word = character_transpose(word)
-            elif corruption_choice < 0.7:  # 15% - character drop
+            elif corruption_choice < 0.75:  # 15% - character drop
                 corrupted_word = character_drop(word)
-            elif corruption_choice < 0.8:  # 10% - word confusion
+            elif corruption_choice < 0.85:  # 10% - word confusion
                 corrupted_word = word_confusion(word)
-            elif corruption_choice < 0.9:  # 10% - character double
+            else:  # 15% - character double
                 corrupted_word = character_double(word)
-            else:  # 10% - academic misspellings
-                corrupted_word = apply_academic_misspelling(word)
             
             corrupted_words.append(corrupted_word)
         else:
@@ -360,56 +211,6 @@ def corrupt_sentence(sentence: str, corruption_rate: float = 0.15, use_external_
         corrupted_words = scramble_small_words(corrupted_words)
     
     return ' '.join(corrupted_words)
-
-def enhanced_keyboard_corruption(word: str) -> str:
-    """Enhanced keyboard error simulation with multiple error types."""
-    if len(word) < 2:
-        return word
-    
-    corruption_type = random.random()
-    
-    if corruption_type < 0.4:  # Adjacent key substitution
-        return keyboard_neighbor_swap(word)
-    elif corruption_type < 0.6:  # Key insertion
-        pos = random.randint(0, len(word))
-        if pos < len(word):
-            char = word[pos].lower()
-            if char in KEYBOARD_NEIGHBORS:
-                neighbor = random.choice(KEYBOARD_NEIGHBORS[char])
-                return word[:pos] + neighbor + word[pos:]
-    elif corruption_type < 0.8:  # Key deletion
-        return character_drop(word)
-    else:  # Key swap (transposition)
-        return character_transpose(word)
-    
-    return word
-
-def apply_academic_misspelling(word: str) -> str:
-    """Apply academic-style misspellings from research literature."""
-    word_lower = word.lower()
-    
-    # Common academic misspelling patterns
-    academic_patterns = {
-        'receive': 'recieve', 'believe': 'beleive', 'achieve': 'acheive',
-        'separate': 'seperate', 'definitely': 'definately', 'necessary': 'neccessary',
-        'occurred': 'occured', 'beginning': 'begining', 'successful': 'sucessful',
-        'recommend': 'reccommend', 'accommodate': 'accomodate', 'privilege': 'priviledge',
-        'tomorrow': 'tommorrow', 'until': 'untill', 'coming': 'comming',
-        'friend': 'freind', 'piece': 'peice', 'weird': 'wierd',
-        'government': 'goverment', 'restaurant': 'resturant', 'library': 'libary'
-    }
-    
-    if word_lower in academic_patterns and random.random() < 0.4:
-        misspelled = academic_patterns[word_lower]
-        # Preserve case
-        if word.isupper():
-            return misspelled.upper()
-        elif word[0].isupper():
-            return misspelled.capitalize()
-        else:
-            return misspelled
-    
-    return word
 
 def is_good_sentence(sentence: str) -> bool:
     """
@@ -618,43 +419,21 @@ def generate_realistic_training_data(
     output_file: str,
     num_examples: int = 10000,
     corruption_rate: float = 0.15,
-    dataset_name: str = "wikitext",
-    use_external_sources: bool = True
+    dataset_name: str = "wikitext"
 ):
     """
-    Generate realistic typo correction training data using multiple high-quality sources.
+    Generate realistic typo correction training data using natural sentences.
     """
     
-    print(f"🚀 Generating realistic typo correction training data with enhanced sources...")
+    print(f"🚀 Generating realistic typo correction training data...")
     print(f"📁 Output: {output_file}")
     print(f"📊 Target examples: {num_examples:,}")
     print(f"🔀 Corruption rate: {corruption_rate}")
     print(f"📚 Source dataset: {dataset_name}")
-    print(f"🔬 External sources: {'Enabled' if use_external_sources else 'Disabled'}")
     print()
     
-    # Load external datasets if enabled
-    holbrook_examples = []
-    if use_external_sources:
-        load_norvig_misspellings()  # Pre-load for caching
-        holbrook_pairs = load_holbrook_pairs()
-        
-        # Add Holbrook pairs as training examples (high quality)
-        for corrupted, clean in holbrook_pairs:
-            holbrook_examples.append({
-                "corrupted": corrupted,
-                "clean": clean,
-                "complexity": classify_sentence_complexity(clean),
-                "word_count": len(clean.split()),
-                "char_count": len(clean),
-                "source": "holbrook"
-            })
-        
-        print(f"🎓 Added {len(holbrook_examples)} Holbrook academic examples")
-    
     # Extract natural sentences
-    wiki_target = max(100, num_examples - len(holbrook_examples))  # Leave room for Holbrook
-    sentences = extract_natural_sentences(dataset_name, max_sentences=wiki_target * 2)
+    sentences = extract_natural_sentences(dataset_name, max_sentences=num_examples * 2)
     
     if not sentences:
         print("❌ No sentences extracted, using fallback samples")
@@ -667,7 +446,7 @@ def generate_realistic_training_data(
         complexity = classify_sentence_complexity(sentence)
         sentence_groups[complexity].append(sentence)
     
-    print(f"📊 WikiText sentence distribution:")
+    print(f"📊 Sentence distribution:")
     print(f"   Simple: {len(sentence_groups['simple'])} sentences")
     print(f"   Medium: {len(sentence_groups['medium'])} sentences") 
     print(f"   Complex: {len(sentence_groups['complex'])} sentences")
@@ -678,25 +457,13 @@ def generate_realistic_training_data(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     generated = 0
-    
-    # Reserve space for high-quality academic examples
-    academic_reserve = len(holbrook_examples)
-    wiki_examples_target = num_examples - academic_reserve
-    
     complexity_targets = {
-        "simple": int(wiki_examples_target * 0.4),    # 40% simple sentences
-        "medium": int(wiki_examples_target * 0.4),    # 40% medium sentences  
-        "complex": int(wiki_examples_target * 0.2)    # 20% complex sentences
+        "simple": int(num_examples * 0.4),    # 40% simple sentences
+        "medium": int(num_examples * 0.4),    # 40% medium sentences  
+        "complex": int(num_examples * 0.2)    # 20% complex sentences
     }
     
     with open(output_file, 'w', encoding='utf-8') as f:
-        # First, write high-quality academic examples
-        print(f"🎓 Writing {len(holbrook_examples)} academic examples...")
-        for example in holbrook_examples:
-            f.write(json.dumps(example) + '\n')
-            generated += 1
-        
-        # Then generate WikiText examples with enhanced corruption
         for complexity, target_count in complexity_targets.items():
             available_sentences = sentence_groups[complexity]
             
@@ -704,7 +471,7 @@ def generate_realistic_training_data(
                 print(f"⚠️ No {complexity} sentences available, skipping...")
                 continue
             
-            print(f"🔄 Generating {target_count} {complexity} WikiText examples...")
+            print(f"🔄 Generating {target_count} {complexity} examples...")
             
             for _ in tqdm(range(target_count), desc=f"Processing {complexity}"):
                 if generated >= num_examples:
@@ -713,8 +480,8 @@ def generate_realistic_training_data(
                 # Pick a random sentence from this complexity group
                 sentence = random.choice(available_sentences)
                 
-                # Apply enhanced corruption with external sources
-                corrupted = corrupt_sentence(sentence, corruption_rate, use_external_sources)
+                # Apply corruption
+                corrupted = corrupt_sentence(sentence, corruption_rate)
                 
                 # Only include if corruption actually occurred
                 if corrupted != sentence:
@@ -723,20 +490,17 @@ def generate_realistic_training_data(
                         "clean": sentence,
                         "complexity": complexity,
                         "word_count": len(sentence.split()),
-                        "char_count": len(sentence),
-                        "source": "wikitext"
+                        "char_count": len(sentence)
                     }
                     
                     f.write(json.dumps(data) + '\n')
                     generated += 1
     
     print(f"✅ Generated {generated:,} realistic training examples")
-    print(f"   🎓 Academic (Holbrook): {len(holbrook_examples)} examples")
-    print(f"   📚 WikiText (enhanced): {generated - len(holbrook_examples)} examples")
     print(f"💾 Saved to: {output_file}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate realistic single-sentence typo correction data with enhanced sources")
+    parser = argparse.ArgumentParser(description="Generate realistic single-sentence typo correction data")
     parser.add_argument('--output', type=str, default='data/realistic/train.jsonl',
                        help='Output JSONL file path')
     parser.add_argument('--num_examples', type=int, default=10000,
@@ -746,8 +510,6 @@ def main():
     parser.add_argument('--dataset', type=str, default='wikitext',
                        choices=['wikitext', 'bookcorpus'], 
                        help='Source dataset to use')
-    parser.add_argument('--no_external_sources', action='store_true',
-                       help='Disable external typo sources (Norvig, Holbrook)')
     
     args = parser.parse_args()
     
@@ -755,8 +517,7 @@ def main():
         output_file=args.output,
         num_examples=args.num_examples,
         corruption_rate=args.corruption_rate,
-        dataset_name=args.dataset,
-        use_external_sources=not args.no_external_sources
+        dataset_name=args.dataset
     )
     
     print("✅ Realistic typo correction data generation complete!")
