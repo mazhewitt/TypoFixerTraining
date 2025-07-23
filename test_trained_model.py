@@ -38,13 +38,16 @@ def test_model(model_path):
             # Tokenize input
             inputs = tokenizer(prompt, return_tensors='pt', truncation=True, max_length=128)
             
-            # Generate correction
+            # Generate correction with better stopping
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=50,
+                max_new_tokens=30,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
                 eos_token_id=tokenizer.eos_token_id,
+                repetition_penalty=1.2,  # Prevent repetition
+                early_stopping=True,
+                no_repeat_ngram_size=3,  # Prevent 3-gram repetition
             )
             
             # Decode generated text (skip prompt)
@@ -53,8 +56,17 @@ def test_model(model_path):
                 skip_special_tokens=True
             ).strip()
             
+            # Extract just the first sentence (before any repetition)
+            if '. ' in generated_text:
+                corrected = generated_text.split('. ')[0] + '.'
+            elif '.' in generated_text:
+                corrected = generated_text.split('.')[0] + '.'
+            else:
+                corrected = generated_text.split()[0:20]  # First 20 words max
+                corrected = ' '.join(corrected)
+            
             print(f"{i}. Input:  {prompt}")
-            print(f"   Output: {generated_text}")
+            print(f"   Output: {corrected}")
             print()
 
 if __name__ == "__main__":
