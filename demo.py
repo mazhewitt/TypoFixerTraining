@@ -146,5 +146,23 @@ def demo():
     print("🔗 Model: https://huggingface.co/mazhewitt/qwen-typo-fixer")
     print("📚 Repository: https://github.com/mazhewitt/TypoFixerTraining")
 
+    # Custom sentences for additional testing
+    custom_examples = [
+        "He went tehre to recive his prise.",
+        "Ths is a vry importnt documnt.",
+        "Plase send me the adress soon.",
+        "She dosen't knw the answr yet.",
+        "I hoppe you enjyoed the event!"
+    ]
+    print("\n🧪 Custom Sentence Tests")
+    print("-" * 60)
+    for i, example in enumerate(custom_examples, 1):
+        print(f"{i}. Input: {example}")
+        basic_result = basic_typo_correction(model, tokenizer, example)
+        print(f"   Basic:     {basic_result}")
+        optimized_result = optimized_typo_correction(model, tokenizer, example)
+        print(f"   Optimized: {optimized_result}")
+        print()
+
 if __name__ == "__main__":
     demo()
