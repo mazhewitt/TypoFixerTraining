@@ -30,7 +30,7 @@ class CoreMLTypoFixer:
         print("🚀 Loading CoreML Typo Fixer Models...")
         
         # Load tokenizer
-        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path, trust_remote_code=True)
         print(f"✅ Tokenizer loaded: {self.tokenizer.__class__.__name__}")
         
         # Load embeddings model
@@ -329,8 +329,8 @@ Output:"""
 def main():
     """Test the complete typo fixer."""
     # Configuration
-    model_dir = "/Users/mazhewitt/projects/TypoFixerTraining/models/qwen-typo-fixer-ane"
-    tokenizer_path = "/Users/mazhewitt/projects/TypoFixerTraining/models/qwen-typo-fixer"
+    model_dir = "/Users/mazdahewitt/projects/train-typo-fixer/models/qwen-typo-fixer-ane"
+    tokenizer_path = "mazhewitt/qwen-typo-fixer"
     
     # Test sentences
     test_sentences = [
