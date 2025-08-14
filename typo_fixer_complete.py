@@ -38,16 +38,17 @@ class CoreMLTypoFixer:
         self.embeddings_model = ct.models.MLModel(embeddings_path)
         print(f"✅ Embeddings model loaded")
         
-        # Load FFN+Prefill model with separate functions (anemll approach)
-        ffn_path = os.path.join(self.model_dir, "qwen-typo-fixer_FFN_PF_lut4_chunk_01of01.mlpackage")
+        # Load FFN Prefill and Infer models as separate mlpackages (flexible S for prefill)
+        prefill_path = os.path.join(self.model_dir, "qwen-typo-fixer_prefill_chunk_01of01.mlpackage")
+        infer_path = os.path.join(self.model_dir, "qwen-typo-fixer_FFN_chunk_01of01.mlpackage")
         self.ffn_model = {
-            'prefill': ct.models.MLModel(ffn_path, function_name='prefill'),
-            'infer': ct.models.MLModel(ffn_path, function_name='infer')
+            'prefill': ct.models.MLModel(prefill_path),
+            'infer': ct.models.MLModel(infer_path)
         }
-        print(f"✅ FFN+Prefill model loaded (prefill & infer functions)")
+        print(f"✅ FFN models loaded (separate prefill & infer)")
         
         # Load LM Head model
-        lm_head_path = os.path.join(self.model_dir, "qwen-typo-fixer_lm_head_lut6.mlpackage")
+        lm_head_path = os.path.join(self.model_dir, "qwen-typo-fixer_lm_head.mlpackage")
         self.lm_head_model = ct.models.MLModel(lm_head_path)
         print(f"✅ LM Head model loaded")
         
@@ -90,11 +91,9 @@ Output:"""
     def run_embeddings(self, input_ids):
         """Run embeddings model."""
         print(f"   📥 Embeddings input shape: {input_ids.shape}")
-        
         start_time = time.time()
         result = self.embeddings_model.predict({"input_ids": input_ids})
         end_time = time.time()
-        
         hidden_states = result['hidden_states']
         print(f"   ✅ Embeddings: {(end_time - start_time)*1000:.1f}ms, output: {hidden_states.shape}")
         return hidden_states
@@ -135,6 +134,7 @@ Output:"""
         """Run prefill on the input sequence using anemll approach."""
         # Initialize KV state if not already done
         if self.kv_state is None:
+            # Initialize shared KV state from the prefill model; reuse for infer
             self.kv_state = self.ffn_model['prefill'].make_state()
         
         batch_pos = 0
@@ -160,6 +160,9 @@ Output:"""
             # Run embeddings
             hidden_states = self.run_embeddings(batch_input)
             
+            # Sanity: log shapes before FFN prefill
+            print(f"      ↳ prefill hidden_states: {hidden_states.shape}, position_ids: {position_ids.shape}, causal_mask: {batch_causal_mask.shape}")
+
             # Run through FFN prefill with state
             inputs = {
                 'hidden_states': hidden_states.astype(np.float16),
@@ -188,6 +191,9 @@ Output:"""
         position_ids = np.array([pos-1], dtype=np.int32)
         single_causal_mask = causal_mask[:, :, pos-1:pos, :].numpy().astype(np.float16)
         
+        # Sanity: log shapes before FFN infer
+        print(f"      ↳ infer hidden_states: {hidden_states.shape}, position_ids: {position_ids.shape}, causal_mask: {single_causal_mask.shape}")
+
         # Run through FFN infer with state
         inputs = {
             'hidden_states': hidden_states.astype(np.float16),
@@ -329,7 +335,7 @@ Output:"""
 def main():
     """Test the complete typo fixer."""
     # Configuration
-    model_dir = "/Users/mazdahewitt/projects/train-typo-fixer/models/qwen-typo-fixer-ane"
+    model_dir = "/Users/mazdahewitt/projects/train-typo-fixer/models/qwen-typo-fixer-ane-flex"
     tokenizer_path = "mazhewitt/qwen-typo-fixer"
     
     # Test sentences
