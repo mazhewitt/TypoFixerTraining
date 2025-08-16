@@ -137,3 +137,6 @@ huggingface_hub/
 # Temporary Python files
 .python-version
 .pyc
+
+# Anemll specific
+anemll/

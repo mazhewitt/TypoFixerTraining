@@ -130,7 +130,7 @@ Output:"""
         mask[:, :, col_indices <= (row_indices + start)] = 0
         return torch.tensor(mask, dtype=torch.float16)
     
-    def run_prefill(self, input_ids, context_pos, context_length, causal_mask, batch_size=64):
+    def run_prefill(self, input_ids, context_pos, context_length, causal_mask, batch_size=128):
         """Run prefill on the input sequence using anemll approach."""
         # Initialize KV state if not already done
         if self.kv_state is None:
@@ -222,27 +222,33 @@ Output:"""
         return int(next_token_id)
     
     def clean_generated_output(self, generated_text, use_basic=True):
-        """Clean generated output using demo.py logic."""
-        # Basic cleaning
+        """Clean generated output using demo.py logic, returning a single complete sentence when possible."""
+        # Start with simple whitespace cleanup
         generated = generated_text.strip()
-        
+
         if not use_basic:
-            # Few-shot cleaning (more thorough)
+            # Few-shot cleanup: collapse spaces and cut at the first newline
             generated = ' '.join(generated.split())
             if '\n' in generated:
                 generated = generated.split('\n')[0].strip()
-            
-            # Remove suffixes that may appear
+            # Remove trailing prompt markers if model drifted into them
             for suffix in ['Input:', 'Output:', 'Human:', 'Assistant:']:
                 if suffix.lower() in generated.lower():
                     generated = generated.split(suffix)[0].strip()
-        
-        # Common cleaning for both approaches
-        if '.' in generated:
-            corrected = generated.split('.')[0].strip() + '.'
-        else:
-            corrected = generated.strip()
-        
+
+        # Prefer the last complete sentence terminator to avoid truncation
+        trimmed = generated
+        for marker in ['Human:', 'Assistant:', 'Input:', 'Output:']:
+            if marker.lower() in trimmed.lower():
+                trimmed = trimmed.split(marker)[0].strip()
+
+        last_idx = -1
+        for p in ['.', '!', '?']:
+            idx = trimmed.rfind(p)
+            if idx > last_idx:
+                last_idx = idx
+
+        corrected = trimmed[: last_idx + 1].strip() if last_idx != -1 else trimmed.strip()
         return corrected
     
     def fix_typos(self, text_with_typos, max_new_tokens=15, temperature=0.1, use_basic=True):

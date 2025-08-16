@@ -245,6 +245,43 @@ train-typo-fixer/
 - **`scripts/testing/test_metal_benchmark.py`** - macOS performance benchmarking  
 - **`scripts/training/train_rtx5090.py`** - Anti-overfitting training pipeline
 
+## 🧪 Run on Apple Neural Engine (CoreML ANE-flex)
+
+This repo includes CoreML artifacts exported for Apple Neural Engine with a fixed prefill sequence length S=128 and a single-token infer path. Use the provided test script to run an end-to-end few-shot example locally on macOS.
+
+### Prerequisites
+- macOS with CoreML runtime (Xcode CLT recommended)
+- Python deps from this repo’s `requirements.txt` (includes coremltools)
+
+### Model files
+Ensure these files exist under `models/qwen-typo-fixer-ane-flex/`:
+- `qwen-typo-fixer_embeddings.mlpackage`
+- `qwen-typo-fixer_prefill_chunk_01of01.mlpackage` (prefill S=128)
+- `qwen-typo-fixer_FFN_chunk_01of01.mlpackage` (single-token infer)
+- `qwen-typo-fixer_lm_head.mlpackage`
+
+### Verify IO shapes (optional)
+```bash
+python3 scripts/testing/inspect_coreml_shapes.py models/qwen-typo-fixer-ane-flex
+```
+You should see:
+- Embeddings input_ids enumerated shapes: [1,1] and [1,128]
+- Prefill inputs: hidden_states [1,128,1024], position_ids [128], causal_mask [1,1,128,256], current_pos [1]
+- Infer inputs: single-token hidden_states [1,1,1024], position_ids [1], causal_mask [1,1,1,256], current_pos [1]
+
+### Run the few-shot example
+```bash
+PYTHONPATH=. python3 scripts/testing/test_fewshot_long.py
+```
+What it does:
+- Builds a few-shot prompt, prefill-runs the prompt (S up to 128), then generates up to 60 tokens greedily.
+- The pipeline cleans the output to return the last complete corrected sentence (removing any stray “Human:”/“Assistant:” text).
+
+Notes:
+- The script uses the tokenizer `mazhewitt/qwen-typo-fixer` locally; network access is only needed the first time to cache it.
+- Warnings like “scikit-learn version … not supported” or “Torch … not tested with coremltools” are benign here.
+- If you want the simpler basic prompt, change `use_basic=False` to `True` in `scripts/testing/test_fewshot_long.py`.
+
 ## 📈 Model Card
 
 - **Model Type**: Causal Language Model (Text Generation)
