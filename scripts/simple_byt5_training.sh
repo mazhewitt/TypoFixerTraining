@@ -54,32 +54,22 @@ fi
 BALANCED_COUNT=$(wc -l < data/enhanced_training_balanced.jsonl)
 echo "✅ Balanced dataset: $BALANCED_COUNT examples"
 
-# STEP 3: Train model (simplified - no distributed training)
+# STEP 3: Train model (simple PyTorch training)
 echo "🚀 Training ByT5 model..."
 echo "⏰ Start: $(date)"
 
 mkdir -p "$OUTPUT_DIR"
 
-python3 t5/train_byt5_improved.py \
-    --model-name "google/byt5-small" \
+python3 scripts/train_byt5_simple.py \
     --train-file "data/enhanced_training_balanced.jsonl" \
     --output-dir "$OUTPUT_DIR" \
-    --prefix "fix typos:" \
-    --max-source-len 256 \
-    --max-target-len 256 \
+    --model-name "google/byt5-small" \
+    --batch-size 16 \
     --learning-rate 5e-5 \
-    --weight-decay 0.01 \
-    --num-epochs 3 \
-    --warmup-ratio 0.1 \
-    --per-device-train-batch-size 16 \
-    --per-device-eval-batch-size 32 \
-    --gradient-accumulation-steps 2 \
-    --num-workers 2 \
-    --eval-steps 1000 \
-    --save-steps 1000 \
-    --logging-steps 100 \
-    --push-to-hub \
-    --hub-model-id "$HUB_MODEL_ID"
+    --epochs 3 \
+    --max-length 256 \
+    --prefix "fix typos:" \
+    # --hub-model-id "$HUB_MODEL_ID"
 
 TRAINING_EXIT=$?
 

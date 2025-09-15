@@ -112,8 +112,8 @@ run_step "MODEL_TRAINING" \
         --save-steps 500 \
         --logging-steps 50 \
         --gradient-checkpointing \
-        --push-to-hub \
-        --hub-model-id "$HUB_MODEL_ID"
+        # --push-to-hub \
+        # --hub-model-id "$HUB_MODEL_ID"
 
 # STEP 4: Test the trained model
 run_step "MODEL_TESTING" \
