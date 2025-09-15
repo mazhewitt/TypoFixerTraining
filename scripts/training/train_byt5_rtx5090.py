@@ -187,6 +187,8 @@ def main():
 
     # Training args
     # Build TrainingArguments with a fallback for older/newer Transformers that lack some kwargs
+    # Also ensure max_steps is always an int (older versions do raw comparisons)
+    max_steps_value = args.max_steps if (args.max_steps is not None and args.max_steps > 0) else -1
     training_args = None
     try:
         training_args = Seq2SeqTrainingArguments(
@@ -218,7 +220,7 @@ def main():
             save_strategy="steps",
             eval_steps=args.eval_steps,
             save_steps=args.save_steps,
-            max_steps=args.max_steps if args.max_steps and args.max_steps > 0 else None,
+            max_steps=max_steps_value,
             load_best_model_at_end=True,
             metric_for_best_model="chrf" if sacrebleu is not None else "exact_match",
             greater_is_better=True,
@@ -253,7 +255,7 @@ def main():
             dataloader_drop_last=True,
             eval_steps=args.eval_steps,
             save_steps=args.save_steps,
-            max_steps=args.max_steps if args.max_steps and args.max_steps > 0 else None,
+            max_steps=max_steps_value,
             ddp_find_unused_parameters=False,
         )
 
