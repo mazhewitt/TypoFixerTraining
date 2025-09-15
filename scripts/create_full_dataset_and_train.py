@@ -66,71 +66,50 @@ def check_dependencies():
         return False
 
 def generate_training_data(num_examples: int, corruption_rate: float) -> bool:
-    """Generate realistic training data"""
+    """Generate realistic training data using the fixed generator"""
     print(f"\n{'='*60}")
     print(f"📝 GENERATING {num_examples:,} TRAINING EXAMPLES")
     print(f"{'='*60}")
     
-    # Ensure data directory exists
-    os.makedirs("data", exist_ok=True)
-    
-    # Generate data using multiple sources for diversity
-    datasets_to_use = [
-        ("wikitext", int(num_examples * 0.6)),  # 60% from Wikipedia
-        ("bookcorpus", int(num_examples * 0.4))  # 40% from books
+    # Use the fixed generator that avoids multiprocessing issues
+    cmd = [
+        "python3", "scripts/generate_100k_dataset_fixed.py",
+        "--num-examples", str(num_examples),
+        "--corruption-rate", str(corruption_rate)
     ]
     
-    all_examples = []
+    if not run_command(cmd, f"Generating {num_examples:,} examples (safe method)"):
+        return False
     
-    for dataset_name, count in datasets_to_use:
-        output_file = f"data/temp_{dataset_name}_{count}.jsonl"
-        
-        cmd = [
-            "python3", "src/realistic_data_generation.py",
-            "--output", output_file,
-            "--num_examples", str(count),
-            "--corruption_rate", str(corruption_rate),
-            "--dataset", dataset_name
-        ]
-        
-        if not run_command(cmd, f"Generating {count:,} examples from {dataset_name}"):
-            return False
-        
-        # Load and collect examples
-        if os.path.exists(output_file):
-            with open(output_file, 'r') as f:
-                for line in f:
-                    try:
-                        example = json.loads(line.strip())
-                        all_examples.append(example)
-                    except json.JSONDecodeError:
-                        continue
-            os.remove(output_file)  # Clean up temp file
-    
-    # Add metadata and shuffle
-    for i, example in enumerate(all_examples):
-        example['id'] = i
-        example['generation_batch'] = 'mixed_sources_100k'
-    
-    random.shuffle(all_examples)
-    
-    # Save combined dataset
+    # Verify the output file exists and has content
     output_file = "data/enhanced_training_full.jsonl"
-    with open(output_file, 'w') as f:
-        for example in all_examples:
-            f.write(json.dumps(example) + '\n')
+    if not os.path.exists(output_file):
+        print(f"❌ Output file not created: {output_file}")
+        return False
     
-    print(f"\n✅ Generated {len(all_examples):,} total examples")
+    # Count and validate examples
+    examples_count = 0
+    sample_example = None
+    
+    with open(output_file, 'r') as f:
+        for line_num, line in enumerate(f, 1):
+            if line.strip():
+                try:
+                    example = json.loads(line.strip())
+                    if sample_example is None:
+                        sample_example = example
+                    examples_count += 1
+                except json.JSONDecodeError:
+                    print(f"⚠️  Invalid JSON on line {line_num}")
+    
+    print(f"\n✅ Generated {examples_count:,} total examples")
     print(f"💾 Saved to: {output_file}")
     
-    # Quality statistics
-    avg_length = sum(len(ex['clean']) for ex in all_examples) / len(all_examples)
-    has_typos = sum(1 for ex in all_examples if ex['corrupted'] != ex['clean'])
-    
-    print(f"\n📊 Dataset Quality:")
-    print(f"   Average sentence length: {avg_length:.1f} characters")
-    print(f"   Examples with typos: {has_typos:,} ({has_typos/len(all_examples)*100:.1f}%)")
-    print(f"   Unique sentences: {len(set(ex['clean'] for ex in all_examples)):,}")
+    if sample_example:
+        print(f"\n📝 Sample example:")
+        print(f"   Corrupted: '{sample_example['corrupted']}'")
+        print(f"   Clean: '{sample_example['clean']}'")
+        print(f"   Complexity: {sample_example.get('complexity', 'unknown')}")
     
     return True
 
