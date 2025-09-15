@@ -172,7 +172,7 @@ class InferenceTestCallback:
 def main():
     ap = argparse.ArgumentParser(description="IMPROVED ByT5-small typo correction training")
     ap.add_argument("--model-name", default="google/byt5-small", help="Base model")
-    ap.add_argument("--train-file", required=True, help="Training file (json/jsonl/csv)")
+    ap.add_argument("--train-file", default="data/enhanced_training_balanced.jsonl", help="Training file (json/jsonl/csv)")
     ap.add_argument("--eval-file", default=None, help="Eval file (json/jsonl/csv)")
     ap.add_argument("--output-dir", default="models/byt5-small-typo-fixer-v2", help="Output directory")
     ap.add_argument("--source-col", default=None, help="Source column name")

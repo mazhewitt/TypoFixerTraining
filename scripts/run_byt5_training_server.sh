@@ -32,7 +32,7 @@ echo ""
 
 # Configuration
 MODEL_NAME="google/byt5-small"
-TRAIN_FILE="data/enhanced_training_full.jsonl"
+TRAIN_FILE="data/enhanced_training_balanced.jsonl"
 OUTPUT_DIR="models/byt5-small-typo-fixer-v2"
 HUB_MODEL_ID="mazhewitt/byt5-small-typo-fixer-v2"
 
