@@ -220,11 +220,19 @@ def load_sentences_safely(dataset_name: str, max_sentences: int = 50000) -> List
                 if sentence and not sentence.endswith(('.', '!', '?')):
                     sentence += '.'
                 
-                # Quality filters
-                if (20 <= len(sentence) <= 200 and
-                    5 <= len(sentence.split()) <= 25 and
+                # Quality filters - much stricter
+                if (20 <= len(sentence) <= 150 and
+                    5 <= len(sentence.split()) <= 20 and
                     sentence.count(' ') >= 4 and
-                    not sentence.startswith(('==', '--', '*', '#')) and
+                    not sentence.startswith(('==', '--', '*', '#', 'Category:', 'File:')) and
+                    '@' not in sentence and  # Remove Wikipedia artifacts
+                    '{{' not in sentence and  # Remove wiki templates
+                    '}}' not in sentence and
+                    '[[' not in sentence and  # Remove wiki links
+                    ']]' not in sentence and
+                    not re.search(r'\d{4}\s*\)', sentence) and  # Remove years in parentheses
+                    not re.search(r'[A-Z]{2,}', sentence) and  # Avoid ALL CAPS
+                    sentence.count('(') <= 1 and  # Limit parentheses
                     sentence.lower() not in seen_sentences):
                     
                     seen_sentences.add(sentence.lower())

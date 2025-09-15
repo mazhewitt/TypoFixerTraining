@@ -27,6 +27,7 @@ from typing import List, Dict, Any, Optional
 
 import torch
 import torch.distributed as dist
+import torch.nn as nn
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer,
@@ -45,11 +46,20 @@ except Exception:
 
 def setup_distributed():
     """Setup for multi-GPU training if available"""
-    if torch.cuda.device_count() > 1:
-        print(f"🚀 Found {torch.cuda.device_count()} GPUs - enabling distributed training")
-        if not dist.is_initialized():
-            dist.init_process_group(backend='nccl')
-    return torch.cuda.device_count()
+    num_gpus = torch.cuda.device_count()
+    if num_gpus > 1:
+        print(f"🚀 Found {num_gpus} GPUs available")
+        # Only initialize distributed if not already done and env vars are set
+        if not dist.is_available() or not dist.is_initialized():
+            if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
+                print("🔧 Initializing distributed training...")
+                dist.init_process_group(backend='nccl')
+            else:
+                print("⚠️  Distributed env vars not set - using DataParallel instead")
+                return num_gpus
+    else:
+        print(f"💻 Using single GPU training")
+    return num_gpus
 
 
 def guess_columns(example: Dict[str, Any], source_col: Optional[str], target_col: Optional[str]):
@@ -232,6 +242,11 @@ def main():
     
     if args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+    
+    # Handle multi-GPU setup
+    if num_gpus > 1 and not dist.is_initialized():
+        print("🔧 Using DataParallel for multi-GPU training")
+        model = nn.DataParallel(model)
 
     # Load datasets
     files = {"train": args.train_file}

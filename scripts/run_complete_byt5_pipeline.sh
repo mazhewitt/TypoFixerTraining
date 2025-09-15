@@ -75,10 +75,10 @@ if [ ! -f "data/enhanced_training_balanced.jsonl" ]; then
 fi
 
 ACTUAL_EXAMPLES=$(wc -l < data/enhanced_training_balanced.jsonl)
-echo "📊 Dataset ready: ${ACTUAL_EXAMPLES:,} examples"
+echo "📊 Dataset ready: $ACTUAL_EXAMPLES examples"
 
 if [ "$ACTUAL_EXAMPLES" -lt 50000 ]; then
-    echo "⚠️  Dataset smaller than expected (${ACTUAL_EXAMPLES:,} < 50,000)"
+    echo "⚠️  Dataset smaller than expected ($ACTUAL_EXAMPLES < 50,000)"
     echo "🤔 Continue anyway? (y/N)"
     read -r response
     if [[ ! "$response" =~ ^[Yy]$ ]]; then
