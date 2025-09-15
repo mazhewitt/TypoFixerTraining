@@ -27,9 +27,11 @@ The typo fixer uses a 3-component architecture optimized for Apple Neural Engine
 Input Tokens → [Embeddings] → [FFN+Prefill/Infer] → [LM Head] → Output Logits
                ↓              ↓                      ↓
                qwen-typo-     qwen-typo-fixer_       qwen-typo-fixer_
-               fixer_         FFN_PF_lut4_           lm_head_lut6.
-               embeddings.    chunk_01of01.          mlpackage
-               mlpackage      mlpackage
+               fixer_         FFN_chunk_01of01.      lm_head.
+               embeddings.    mlpackage &            mlpackage
+               mlpackage      qwen-typo-fixer_
+                              prefill_chunk_01of01.
+                              mlpackage
 ```
 
 #### Component Details:
@@ -38,13 +40,14 @@ Input Tokens → [Embeddings] → [FFN+Prefill/Infer] → [LM Head] → Output L
    - Input: `input_ids` [batch, seq_len]
    - Output: `hidden_states` [batch, seq_len, 1024]
 
-2. **FFN Model** (`qwen-typo-fixer_FFN_PF_lut4_chunk_01of01.mlpackage`)
-   - Dual-function model with `prefill` and `infer` functions
+2. **FFN Models**: 
+   - **FFN Model** (`qwen-typo-fixer_FFN_chunk_01of01.mlpackage`) - Inference function
+   - **Prefill Model** (`qwen-typo-fixer_prefill_chunk_01of01.mlpackage`) - Prefill function
    - **Prefill**: Processes full prompt context (batch processing)
    - **Infer**: Generates single tokens autoregressively
    - Maintains KV-cache state for efficient generation
 
-3. **LM Head Model** (`qwen-typo-fixer_lm_head_lut6.mlpackage`)
+3. **LM Head Model** (`qwen-typo-fixer_lm_head.mlpackage`)
    - Final linear layer producing vocabulary logits
    - Input: `hidden_states` [batch, 1, 1024]
    - Output: 16-part logits that concatenate to [batch, 1, vocab_size]
@@ -52,8 +55,9 @@ Input Tokens → [Embeddings] → [FFN+Prefill/Infer] → [LM Head] → Output L
 ### 3. Model Locations
 
 #### HuggingFace Hub
-- **Primary Model**: https://alpha-ollama.hf-mirror.com/mazhewitt/qwen-typo-fixer
-- **Special CoreML Folder**: Contains all `.mlpackage` files for deployment
+- **Primary Model**: https://huggingface.co/mazhewitt/qwen-typo-fixer
+- **CoreML Repository**: https://huggingface.co/mazhewitt/qwen-typo-fixer-coreml
+- **CoreML Models**: Contains all `.mlpackage` files for deployment
 - **Tokenizer**: Standard Qwen tokenizer with typo correction fine-tuning
 
 #### Local Development
@@ -132,7 +136,7 @@ Based on candle-coreml README instructions:
 ```
 /Users/mazdahewitt/projects/train-typo-fixer/    # Training & Python reference
 ├── typo_fixer_complete.py                       # ✅ Working Python implementation
-├── models/qwen-typo-fixer-ane/                  # Local CoreML models
+├── models/qwen-typo-fixer-ane-flex/             # Local CoreML models (latest)
 ├── src/                                         # Training scripts
 ├── scripts/testing/                             # Validation scripts
 └── CLAUDE.md                                    # This documentation

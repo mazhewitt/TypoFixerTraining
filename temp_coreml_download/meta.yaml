@@ -1,0 +1,25 @@
+model_info:
+  name: anemll-qwen-typo-fixer-ctx256
+  version: 0.3.4
+  description: |
+    Demonstarates running qwen-typo-fixer on Apple Neural Engine
+    Context length: 256
+    Batch size: 64
+    Chunks: 1
+  license: MIT
+  author: Anemll
+  framework: Core ML
+  language: Python
+  architecture: qwen3
+  parameters:
+    context_length: 256
+    batch_size: 64
+    lut_embeddings: none
+    lut_ffn: 4
+    lut_lmhead: 6
+    num_chunks: 1
+    model_prefix: qwen-typo-fixer
+    embeddings: qwen-typo-fixer_embeddings.mlmodelc
+    lm_head: qwen-typo-fixer_lm_head_lut6.mlmodelc
+    ffn: qwen-typo-fixer_FFN_PF_lut4.mlmodelc
+    split_lm_head: 16
