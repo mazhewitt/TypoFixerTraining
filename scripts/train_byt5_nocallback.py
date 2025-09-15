@@ -133,11 +133,9 @@ def main():
         gradient_accumulation_steps=1,
         
         # Evaluation
-        eval_strategy="steps",
-        eval_steps=200,
-        save_strategy="steps", 
-        save_steps=200,
-        save_total_limit=2,
+        eval_strategy="epoch",  # Evaluate at end of each epoch only
+        save_strategy="epoch",  # Save only at end of each epoch
+        save_total_limit=1,     # Keep only the latest save
         
         # Generation
         predict_with_generate=True,
