@@ -205,6 +205,30 @@ def main():
         def __init__(self):
             self.loss_history = []
             
+        def on_init_end(self, args, state, control, **kwargs):
+            return control
+            
+        def on_train_begin(self, args, state, control, **kwargs):
+            return control
+            
+        def on_train_end(self, args, state, control, **kwargs):
+            return control
+            
+        def on_epoch_begin(self, args, state, control, **kwargs):
+            return control
+            
+        def on_epoch_end(self, args, state, control, **kwargs):
+            return control
+            
+        def on_step_begin(self, args, state, control, **kwargs):
+            return control
+            
+        def on_step_end(self, args, state, control, **kwargs):
+            return control
+            
+        def on_evaluate(self, args, state, control, **kwargs):
+            return control
+            
         def on_log(self, args, state, control, model=None, logs=None, **kwargs):
             if logs and "loss" in logs:
                 loss = logs["loss"]
@@ -225,6 +249,7 @@ def main():
                     if all(l == 0.0 for l in recent_losses[-3:]):
                         print(f"\n🛑 STOPPING: Loss has been 0.0 for multiple steps!")
                         control.should_training_stop = True
+            return control
 
     # Trainer with monitoring
     trainer = Seq2SeqTrainer(
