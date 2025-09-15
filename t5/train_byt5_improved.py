@@ -160,6 +160,28 @@ class InferenceTestCallback:
         self.prefix = prefix
         self.test_results = []
     
+    def on_init_end(self, args, state, control, **kwargs):
+        # Required method for callback
+        return control
+    
+    def on_train_begin(self, args, state, control, **kwargs):
+        return control
+    
+    def on_train_end(self, args, state, control, **kwargs):
+        return control
+    
+    def on_epoch_begin(self, args, state, control, **kwargs):
+        return control
+    
+    def on_epoch_end(self, args, state, control, **kwargs):
+        return control
+    
+    def on_step_begin(self, args, state, control, **kwargs):
+        return control
+    
+    def on_step_end(self, args, state, control, **kwargs):
+        return control
+    
     def on_evaluate(self, args, state, control, model=None, **kwargs):
         if model is not None:
             device = next(model.parameters()).device
@@ -177,6 +199,7 @@ class InferenceTestCallback:
                 'step': state.global_step,
                 'results': results
             })
+        return control
 
 
 def main():

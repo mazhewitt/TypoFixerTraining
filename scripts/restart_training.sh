@@ -28,25 +28,17 @@ echo "⏰ Start: $(date)"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Train without HuggingFace upload
-python3 t5/train_byt5_improved.py \
+# Train with minimal script (no complex callbacks)
+python3 scripts/train_byt5_minimal.py \
     --train-file "data/enhanced_training_balanced.jsonl" \
     --output-dir "$OUTPUT_DIR" \
     --prefix "fix typos:" \
-    --max-source-len 512 \
-    --max-target-len 512 \
+    --max-source-len 256 \
+    --max-target-len 256 \
     --learning-rate 5e-5 \
-    --weight-decay 0.01 \
     --num-epochs 3 \
-    --warmup-ratio 0.1 \
     --per-device-train-batch-size 8 \
-    --per-device-eval-batch-size 16 \
-    --gradient-accumulation-steps 4 \
-    --num-workers 4 \
-    --eval-steps 500 \
-    --save-steps 500 \
-    --logging-steps 50 \
-    --gradient-checkpointing
+    --gradient-accumulation-steps 4
 
 TRAINING_EXIT=$?
 
