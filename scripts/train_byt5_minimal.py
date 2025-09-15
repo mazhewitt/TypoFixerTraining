@@ -151,6 +151,7 @@ def main():
         dataloader_num_workers=2,
         report_to=["none"],
         seed=42,
+        remove_unused_columns=False,  # Fix for column mismatch
     )
 
     # Trainer - minimal setup
