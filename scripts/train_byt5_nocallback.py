@@ -132,10 +132,12 @@ def main():
         max_grad_norm=1.0,
         gradient_accumulation_steps=1,
         
-        # Evaluation
-        eval_strategy="epoch",  # Evaluate at end of each epoch only
-        save_strategy="epoch",  # Save only at end of each epoch
-        save_total_limit=1,     # Keep only the latest save
+        # Evaluation - frequent checkpointing to find sweet spot
+        eval_strategy="steps",
+        eval_steps=100,         # Evaluate every 100 steps
+        save_strategy="steps", 
+        save_steps=100,         # Save every 100 steps
+        save_total_limit=50,    # Keep many checkpoints
         
         # Generation
         predict_with_generate=True,
