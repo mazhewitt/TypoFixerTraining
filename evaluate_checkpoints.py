@@ -43,21 +43,33 @@ def evaluate_checkpoint(checkpoint_path, test_examples):
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=100,
+                max_new_tokens=50,  # Reduce to prevent repetition
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=tokenizer.eos_token_id
+                eos_token_id=tokenizer.eos_token_id,
+                repetition_penalty=1.1  # Prevent repetition
             )
 
+        # Decode with special tokens to see structure
+        generated_with_tokens = tokenizer.decode(outputs[0], skip_special_tokens=False)
         generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        # Extract just the correction part
-        correction = generated.replace(prompt.replace("<|im_start|>", "").replace("<|im_end|>", "").replace("\n", " "), "").strip()
 
-        # Clean up the correction
-        if "<|im_start|>assistant" in correction:
-            correction = correction.split("<|im_start|>assistant")[-1].strip()
-        if "<|im_end|>" in correction:
-            correction = correction.split("<|im_end|>")[0].strip()
+        # Extract just the new tokens (after the prompt)
+        prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+        response_tokens = outputs[0][len(prompt_tokens):]
+        correction = tokenizer.decode(response_tokens, skip_special_tokens=True).strip()
+
+        # Clean up common issues
+        if correction.startswith('\n'):
+            correction = correction[1:]
+
+        # If there are multiple assistant responses, take the first one
+        if '\nassistant\n' in correction:
+            correction = correction.split('\nassistant\n')[0].strip()
+
+        # Remove any remaining assistant labels
+        if correction.startswith('assistant\n'):
+            correction = correction[10:].strip()
 
         # Simple exact match evaluation (case insensitive, stripped)
         if correction.lower().strip() == expected.lower().strip():
@@ -165,20 +177,29 @@ def test_best_model():
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=100,
+                max_new_tokens=50,  # Reduce to prevent repetition
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                eos_token_id=tokenizer.eos_token_id
+                eos_token_id=tokenizer.eos_token_id,
+                repetition_penalty=1.1  # Prevent repetition
             )
 
-        generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        correction = generated.replace(prompt.replace("<|im_start|>", "").replace("<|im_end|>", "").replace("\n", " "), "").strip()
+        # Extract just the new tokens (after the prompt)
+        prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+        response_tokens = outputs[0][len(prompt_tokens):]
+        correction = tokenizer.decode(response_tokens, skip_special_tokens=True).strip()
 
-        # Clean up the correction
-        if "<|im_start|>assistant" in correction:
-            correction = correction.split("<|im_start|>assistant")[-1].strip()
-        if "<|im_end|>" in correction:
-            correction = correction.split("<|im_end|>")[0].strip()
+        # Clean up common issues
+        if correction.startswith('\n'):
+            correction = correction[1:]
+
+        # If there are multiple assistant responses, take the first one
+        if '\nassistant\n' in correction:
+            correction = correction.split('\nassistant\n')[0].strip()
+
+        # Remove any remaining assistant labels
+        if correction.startswith('assistant\n'):
+            correction = correction[10:].strip()
 
         print(f"Original:  '{test_case}'")
         print(f"Corrected: '{correction}'")

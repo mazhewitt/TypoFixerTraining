@@ -42,10 +42,11 @@ def debug_model():
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=100,
+            max_new_tokens=50,  # Reduce to prevent repetition
             do_sample=False,
             pad_token_id=tokenizer.eos_token_id,
-            eos_token_id=tokenizer.eos_token_id
+            eos_token_id=tokenizer.eos_token_id,
+            repetition_penalty=1.1  # Prevent repetition
         )
 
     # Decode full output
@@ -59,18 +60,28 @@ def debug_model():
     print(full_generated)
     print()
 
-    # Try to extract just the assistant response
-    if "<|im_start|>assistant" in full_generated:
-        assistant_part = full_generated.split("<|im_start|>assistant")[-1]
-        if "<|im_end|>" in assistant_part:
-            correction = assistant_part.split("<|im_end|>")[0].strip()
-        else:
-            correction = assistant_part.strip()
-    else:
-        # Fallback: remove the original prompt
-        correction = full_generated.replace(prompt, "").strip()
+    # NEW PARSING METHOD: Extract just the new tokens
+    prompt_tokens = tokenizer.encode(prompt, add_special_tokens=False)
+    response_tokens = outputs[0][len(prompt_tokens):]
+    correction = tokenizer.decode(response_tokens, skip_special_tokens=True).strip()
 
-    print(f"✨ Extracted correction:")
+    print(f"🔧 NEW: Prompt tokens length: {len(prompt_tokens)}")
+    print(f"🔧 NEW: Response tokens: {response_tokens}")
+    print(f"🔧 NEW: Raw correction: {repr(correction)}")
+
+    # Clean up common issues
+    if correction.startswith('\n'):
+        correction = correction[1:]
+
+    # If there are multiple assistant responses, take the first one
+    if '\nassistant\n' in correction:
+        correction = correction.split('\nassistant\n')[0].strip()
+
+    # Remove any remaining assistant labels
+    if correction.startswith('assistant\n'):
+        correction = correction[10:].strip()
+
+    print(f"✨ Final extracted correction:")
     print(repr(correction))
     print()
     print(f"Final: '{correction}'")
