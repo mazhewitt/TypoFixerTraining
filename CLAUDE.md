@@ -181,3 +181,4 @@ This project successfully demonstrates:
 4. **🔧 Rust Integration** - Demo CLI proving candle-coreml library effectiveness
 
 **Next Phase**: Complete the Rust CLI demo to showcase candle-coreml as a production-ready library for custom fine-tuned models.
+- The training is done on an external machine with a dual RTX5090.  The only way to get data onto the machine is from github or HF and the way we get models out is by uploading them to HF.
