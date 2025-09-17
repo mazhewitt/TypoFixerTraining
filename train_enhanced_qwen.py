@@ -37,7 +37,7 @@ class QwenTrainingConfig:
     """Configuration for Qwen training."""
 
     # Model configuration
-    model_name: str = "Qwen/Qwen3-0.6B"  # Latest Qwen model with superior performance
+    model_name: str = "Qwen/Qwen3-0.6B-Base"  # Base model (not instruction-tuned) for conservative behavior
     model_max_length: int = 512
 
     # Training data
