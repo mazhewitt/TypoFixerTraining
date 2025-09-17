@@ -88,7 +88,7 @@ def find_best_checkpoint():
 
     if not checkpoints:
         print("⚠️  No checkpoints found, using final model")
-        if base_dir.exists() and (base_dir / "pytorch_model.bin").exists():
+        if base_dir.exists() and ((base_dir / "pytorch_model.bin").exists() or (base_dir / "model.safetensors").exists()):
             checkpoints = [base_dir]
 
     if not checkpoints:
@@ -98,7 +98,7 @@ def find_best_checkpoint():
     # Evaluate each checkpoint
     results = {}
     for checkpoint in sorted(checkpoints):
-        if (checkpoint / "pytorch_model.bin").exists():
+        if (checkpoint / "pytorch_model.bin").exists() or (checkpoint / "model.safetensors").exists():
             try:
                 accuracy = evaluate_checkpoint(checkpoint, test_examples)
                 results[str(checkpoint)] = accuracy
