@@ -20,7 +20,7 @@ def evaluate_checkpoint(checkpoint_path, test_examples):
 
     model = AutoModelForCausalLM.from_pretrained(
         checkpoint_path,
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True
     )
@@ -36,13 +36,16 @@ def evaluate_checkpoint(checkpoint_path, test_examples):
         prompt = f"<|im_start|>user\nCorrect the typos in this text: {corrupted}<|im_end|>\n<|im_start|>assistant\n"
         inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
 
+        # Move inputs to same device as model
+        if torch.cuda.is_available():
+            inputs = {k: v.to('cuda') for k, v in inputs.items()}
+
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=100,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                temperature=0.1,
                 eos_token_id=tokenizer.eos_token_id
             )
 
@@ -134,7 +137,7 @@ def test_best_model():
 
     model = AutoModelForCausalLM.from_pretrained(
         best_checkpoint,
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
         device_map="auto",
         trust_remote_code=True
     )
@@ -155,13 +158,16 @@ def test_best_model():
         prompt = f"<|im_start|>user\nCorrect the typos in this text: {test_case}<|im_end|>\n<|im_start|>assistant\n"
         inputs = tokenizer(prompt, return_tensors="pt", max_length=512, truncation=True)
 
+        # Move inputs to same device as model
+        if torch.cuda.is_available():
+            inputs = {k: v.to('cuda') for k, v in inputs.items()}
+
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=100,
                 do_sample=False,
                 pad_token_id=tokenizer.eos_token_id,
-                temperature=0.1,
                 eos_token_id=tokenizer.eos_token_id
             )
 
