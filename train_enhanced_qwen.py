@@ -77,6 +77,10 @@ class QwenTrainingConfig:
     # Resume training
     resume_from_checkpoint: Optional[str] = None
 
+    # Additional config fields that might be in JSON
+    dataloader_pin_memory: bool = False
+    eval_accumulation_steps: int = 1
+
 def load_enhanced_dataset(file_path: str, eval_split: float = 0.1) -> DatasetDict:
     """Load the enhanced Qwen training dataset."""
 
@@ -443,7 +447,6 @@ def main():
         print(f"📄 Loading config from: {args.config_file}")
         with open(args.config_file, 'r') as f:
             config_dict = json.load(f)
-        print(f"📄 Loaded config: {config_dict}")
         config = QwenTrainingConfig(**config_dict)
     else:
         print("⚠️  Using default config")

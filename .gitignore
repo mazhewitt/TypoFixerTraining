@@ -58,6 +58,9 @@ datasets/
 !requirements-cloud.txt
 !*requirements*.txt
 
+# Include training config files
+!training_config*.json
+
 # Model checkpoints and outputs
 models/
 checkpoints/
