@@ -39,15 +39,32 @@ git clone https://github.com/yourusername/TypoFixerTraining.git
 cd TypoFixerTraining
 ```
 
-### 1.2 Create Virtual Environment
+### 1.2 Setup Environment (SAFE for RTX5090 machines)
+
+**⚠️ IMPORTANT**: These machines are preconfigured with PyTorch/CUDA. Use the safe setup to avoid downgrading GPU libraries.
+
+**Option A: Safe Setup Script (Recommended)**
+```bash
+# Uses system PyTorch/CUDA, only installs missing packages
+chmod +x setup_safe.sh
+./setup_safe.sh
+```
+
+**Option B: Manual Safe Setup**
+```bash
+# Create venv with system site packages (inherits PyTorch/CUDA)
+python3 -m venv --system-site-packages venv
+source venv/bin/activate
+
+# Install ONLY minimal missing packages
+pip install transformers>=4.30.0 datasets>=2.10.0 huggingface_hub>=0.16.0 tqdm
+```
+
+**Option C: If you have permission issues with system packages**
 ```bash
 python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate     # Windows
-
-# Install dependencies
-pip install -r requirements.txt
+source venv/bin/activate
+pip install -r requirements.txt  # Minimal deps only
 ```
 
 ### 1.3 Generate Enhanced Training Dataset
