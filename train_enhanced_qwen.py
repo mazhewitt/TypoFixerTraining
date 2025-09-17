@@ -447,15 +447,7 @@ def main():
         print(f"📄 Loading config from: {args.config_file}")
         with open(args.config_file, 'r') as f:
             config_dict = json.load(f)
-        print(f"🔍 Config dict model_name: {config_dict.get('model_name')}")
-        print(f"🔍 Config dict output_dir: {config_dict.get('output_dir')}")
-        try:
-            config = QwenTrainingConfig(**config_dict)
-            print(f"🔍 Final config model_name: {config.model_name}")
-            print(f"🔍 Final config output_dir: {config.output_dir}")
-        except Exception as e:
-            print(f"❌ Error creating config: {e}")
-            config = QwenTrainingConfig()
+        config = QwenTrainingConfig(**config_dict)
     else:
         print("⚠️  Using default config")
         config = QwenTrainingConfig()
