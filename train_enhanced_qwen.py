@@ -440,10 +440,13 @@ def main():
 
     # Load config
     if args.config_file and os.path.exists(args.config_file):
+        print(f"📄 Loading config from: {args.config_file}")
         with open(args.config_file, 'r') as f:
             config_dict = json.load(f)
+        print(f"📄 Loaded config: {config_dict}")
         config = QwenTrainingConfig(**config_dict)
     else:
+        print("⚠️  Using default config")
         config = QwenTrainingConfig()
 
     # Override with command line arguments
