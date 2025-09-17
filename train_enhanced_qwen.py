@@ -156,15 +156,9 @@ def preprocess_function(examples: Dict, tokenizer: AutoTokenizer, max_length: in
         add_special_tokens=True
     )
 
-    # For causal LM, labels are the same as input_ids
-    # But we need to ignore padding tokens in loss calculation
-    labels = tokenized['input_ids'].copy()
-
-    # Replace padding token ids with -100 so they're ignored in loss calculation
-    for i, input_ids in enumerate(labels):
-        labels[i] = [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in input_ids]
-
-    tokenized['labels'] = labels
+    # For causal LM with DataCollatorForLanguageModeling, we don't set labels
+    # The data collator will automatically create labels from input_ids
+    # Just return the tokenized inputs
 
     return tokenized
 
