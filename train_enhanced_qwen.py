@@ -10,6 +10,9 @@ import os
 import json
 import torch
 import logging
+
+# Fix tokenizer parallelism warning
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 from dataclasses import dataclass
@@ -131,19 +134,27 @@ def load_enhanced_dataset(file_path: str, eval_split: float = 0.1) -> DatasetDic
     return dataset_dict
 
 def preprocess_function(examples: Dict, tokenizer: AutoTokenizer, max_length: int = 512) -> Dict:
-    """Preprocess examples for training."""
+    """Preprocess examples for training with proper padding and truncation."""
 
     # Tokenize the text
     tokenized = tokenizer(
         examples['text'],
         truncation=True,
-        padding=False,
+        padding='max_length',  # Pad to max_length for consistent tensor sizes
         max_length=max_length,
-        return_tensors=None
+        return_tensors=None,
+        add_special_tokens=True
     )
 
     # For causal LM, labels are the same as input_ids
-    tokenized['labels'] = tokenized['input_ids'].copy()
+    # But we need to ignore padding tokens in loss calculation
+    labels = tokenized['input_ids'].copy()
+
+    # Replace padding token ids with -100 so they're ignored in loss calculation
+    for i, input_ids in enumerate(labels):
+        labels[i] = [token_id if token_id != tokenizer.pad_token_id else -100 for token_id in input_ids]
+
+    tokenized['labels'] = labels
 
     return tokenized
 
@@ -323,11 +334,12 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         desc="Tokenizing dataset"
     )
 
-    # Data collator
+    # Data collator with proper padding handling
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=False,  # We're doing causal LM, not masked LM
-        pad_to_multiple_of=8 if config.fp16 else None
+        pad_to_multiple_of=8 if config.fp16 else None,
+        return_tensors="pt"
     )
 
     # Training arguments
