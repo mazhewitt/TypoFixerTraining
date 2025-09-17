@@ -24,6 +24,5 @@
   "early_stopping_patience": 5,
   "early_stopping_threshold": 0.001,
   "use_cached_tokens": true,
-  "cached_tokens_dir": "data/tokenized_cache",
-  "gradient_checkpointing": true
+  "cached_tokens_dir": "data/tokenized_cache"
 }
