@@ -210,9 +210,8 @@ wandb login
 python train_enhanced_qwen.py --config-file training_config.json
 
 # OR Multi-GPU training (recommended for RTX5090s)
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node=2 \
-    --use_env \
     train_dual_gpu.py
 ```
 
@@ -661,7 +660,7 @@ huggingface-cli login
 python generate_enhanced_qwen_dataset.py --target-size 100000 --output-file data/enhanced_qwen_training.jsonl
 
 # 3. Train Model
-python -m torch.distributed.launch --nproc_per_node=2 --use_env train_dual_gpu.py
+torchrun --nproc_per_node=2 train_dual_gpu.py
 
 # 4. Evaluate Checkpoints
 python evaluate_checkpoints.py

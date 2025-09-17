@@ -5,7 +5,7 @@
 # Essential libraries only (avoid downgrading preinstalled GPU stack)
 transformers>=4.30.0
 datasets>=2.10.0
-huggingface_hub>=0.16.0
+huggingface_hub>=0.34.0
 
 # Data processing - lightweight
 tqdm>=4.60.0

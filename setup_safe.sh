@@ -31,7 +31,7 @@ echo "📥 Installing minimal additional packages..."
 # Install transformers and friends (most likely to be missing)
 pip install --no-deps transformers>=4.30.0
 pip install --no-deps datasets>=2.10.0
-pip install --no-deps huggingface_hub>=0.16.0
+pip install --no-deps huggingface_hub>=0.34.0
 pip install --no-deps tokenizers>=0.13.0
 
 # Install pure Python utilities (safe)
