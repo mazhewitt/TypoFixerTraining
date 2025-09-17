@@ -431,12 +431,12 @@ def main():
 
     parser = argparse.ArgumentParser(description="Train Qwen with enhanced dataset")
     parser.add_argument('--config-file', type=str, help='JSON config file')
-    parser.add_argument('--model-name', type=str, default="Qwen/Qwen2-0.5B")
-    parser.add_argument('--train-file', type=str, default="data/enhanced_qwen_training.jsonl")
-    parser.add_argument('--output-dir', type=str, default="models/qwen-enhanced-typo-fixer")
-    parser.add_argument('--num-epochs', type=int, default=3)
-    parser.add_argument('--batch-size', type=int, default=8)
-    parser.add_argument('--learning-rate', type=float, default=5e-5)
+    parser.add_argument('--model-name', type=str, default=None)
+    parser.add_argument('--train-file', type=str, default=None)
+    parser.add_argument('--output-dir', type=str, default=None)
+    parser.add_argument('--num-epochs', type=int, default=None)
+    parser.add_argument('--batch-size', type=int, default=None)
+    parser.add_argument('--learning-rate', type=float, default=None)
     parser.add_argument('--resume-from-checkpoint', type=str, help='Resume training from checkpoint')
     parser.add_argument('--no-wandb', action='store_true', help='Disable wandb logging')
 
