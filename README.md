@@ -1,22 +1,51 @@
-# Qwen 0.6B Typo Correction Model
+# Enhanced Qwen Typo Fixer
 
-A fine-tuned **Qwen 0.6B** model for automatic typo correction, achieving **88.5% sentence accuracy** through optimized few-shot prompting and diverse training data.
+A fine-tuned **Qwen 2-0.5B** model for automatic typo correction using **advanced T5-improved training data** with sophisticated error patterns, multi-domain coverage, and balanced punctuation handling.
 
 ## 🎯 Model Overview
 
-- **Base Model**: Qwen/Qwen3-0.6B (596M parameters)
-- **Task**: Text-to-text typo correction 
-- **Training Data**: 23,627 high-quality examples from multiple sources
-- **Accuracy**: 88.5% sentence accuracy (1.5% from 90% target)
-- **Performance**: Conservative, focused corrections without over-generation
-- **Deployment**: Optimized for both GPU and Apple Neural Engine
+- **Base Model**: Qwen/Qwen2-0.5B (500M parameters)
+- **Task**: Text-to-text typo correction with instruction following
+- **Training Data**: 70,000+ enhanced examples with T5-improved generation
+- **Features**: Multi-domain coverage, advanced error patterns, punctuation balance
+- **Performance**: Enhanced accuracy through sophisticated data generation
+- **Deployment**: GPU-optimized for RTX5090 and other high-end hardware
 
 ## 🚀 Quick Start
 
-### Installation
+### Complete Training Pipeline (RTX5090)
+
+For the complete end-to-end training experience:
 
 ```bash
-pip install torch transformers
+# 1. Setup
+git clone https://github.com/yourusername/TypoFixerTraining.git
+cd TypoFixerTraining
+./setup_safe.sh
+
+# 2. Generate Enhanced Dataset (100K examples)
+python generate_enhanced_qwen_dataset.py --target-size 100000
+
+# 3. Train Model (Single GPU - Recommended)
+python train_single_gpu.py
+
+# 4. Evaluate Best Checkpoint
+python evaluate_checkpoints.py
+
+# 5. Upload to HuggingFace
+python upload_to_hf.py --username YOUR_HF_USERNAME
+```
+
+**Expected Results:**
+- **Training Time**: 6-8 hours on RTX5090
+- **Dataset**: 70,000+ enhanced examples with T5 improvements
+- **Model Accuracy**: Expected 85-92% on typo correction tasks
+- **Model Size**: ~1.2GB (Qwen2-0.5B based)
+
+### Using Pre-trained Model
+
+```bash
+pip install torch transformers huggingface_hub
 ```
 
 ### Basic Usage
@@ -25,15 +54,15 @@ pip install torch transformers
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Load model and tokenizer
-tokenizer = AutoTokenizer.from_pretrained("mazhewitt/qwen-typo-fixer")
-model = AutoModelForCausalLM.from_pretrained("mazhewitt/qwen-typo-fixer")
+tokenizer = AutoTokenizer.from_pretrained("YOUR_USERNAME/qwen-enhanced-typo-fixer", trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("YOUR_USERNAME/qwen-enhanced-typo-fixer", trust_remote_code=True)
 
-# Correct typos
-prompt = "Fix: I beleive this is teh correct answr."
+# Correct typos using instruction format
+prompt = "<|im_start|>user\nCorrect the typos in this text: I beleive this is teh correct answr.<|im_end|>\n<|im_start|>assistant\n"
 inputs = tokenizer(prompt, return_tensors="pt")
-outputs = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-correction = tokenizer.decode(outputs[0][inputs['input_ids'].shape[-1]:], skip_special_tokens=True)
-print(correction)  # "I believe this is the correct answer."
+outputs = model.generate(**inputs, max_new_tokens=50, temperature=0.1, do_sample=False)
+correction = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(correction)  # Shows the corrected text
 ```
 
 ### Optimized Inference (Recommended - 88.5% Accuracy)
@@ -166,84 +195,126 @@ Our training specifically addressed overfitting issues through:
 - **Training Time**: ~25 minutes (proper learning vs 4min overfitting)
 - **Final Loss**: Gradual decrease to ~0.01 (not instant drop to 0)
 
-## 🛠️ Reproducing Training
+## 🛠️ Enhanced Training Pipeline
 
-### Quick Demo
+### Prerequisites (RTX5090 or Similar GPU)
 ```bash
-# Run the demonstration script
-python3 demo.py
-```
-
-### Prerequisites
-```bash
-# Environment setup
-git clone -b qwen-approach https://github.com/mazhewitt/TypoFixerTraining.git
+# Clone repository
+git clone https://github.com/yourusername/TypoFixerTraining.git
 cd TypoFixerTraining
-./scripts/training/setup_rtx5090.sh
+
+# Safe setup for preconfigured GPU machines
+chmod +x setup_safe.sh
+./setup_safe.sh
 ```
 
-### Generate Training Data
+### Generate Enhanced Training Data
 ```bash
-# Generate 23K+ diverse examples (takes ~15 minutes)
-python3 src/realistic_data_generation.py --output data/enhanced_training_large.jsonl --num_examples 50000
+# Generate 100K examples with T5 improvements (takes ~30 minutes)
+python generate_enhanced_qwen_dataset.py \
+    --target-size 100000 \
+    --output-file data/enhanced_qwen_training.jsonl \
+    --seed 42
 ```
+
+**Enhanced Dataset Features:**
+- **Advanced Error Patterns**: Keyboard layouts, homophones, phonetic confusions
+- **Multi-Domain Coverage**: Conversational, professional, educational, creative, instructional, general
+- **Punctuation Balance**: 50/50 split with/without ending punctuation
+- **Complex Multi-Error Sentences**: Realistic corruption patterns
+- **Quality Filtering**: Advanced sentence selection and validation
 
 ### Train Model
+
+**Option A: Single GPU (Recommended - More Stable)**
 ```bash
-# Anti-overfitting training with dual RTX 5070 Ti
-python3 scripts/training/train_rtx5090.py \
-    --train_file data/enhanced_training_large.jsonl \
-    --output_dir models/qwen-typo-fixer-v2 \
-    --hf_repo your-username/qwen-typo-fixer \
-    --num_epochs 3 \
-    --early_stopping_patience 3 \
-    --max_weight_decay 0.1 \
-    --eval_steps 100
+# Single RTX5090 training (batch size optimized for one GPU)
+python train_single_gpu.py
 ```
 
-### Test Model Performance
+**Option B: Dual GPU (If No CUDA Issues)**
 ```bash
-# Test optimized 88.5% accuracy approach (RECOMMENDED)
-python3 scripts/testing/optimized_accuracy_test.py
+# Dual RTX5090 distributed training
+torchrun --nproc_per_node=2 train_dual_gpu.py
+```
 
-# Compare fine-tuned vs base model performance
-python3 scripts/testing/compare_models.py
+**Training Features:**
+- **Model**: Qwen/Qwen2-0.5B with instruction format
+- **Batch Size**: 32 (single) or 16×2 (dual GPU)
+- **Mixed Precision**: FP16 for efficiency
+- **Early Stopping**: Prevents overfitting
+- **Wandb Integration**: Experiment tracking
 
-# Metal GPU benchmark (macOS)
-python3 scripts/testing/test_metal_benchmark.py
+### Evaluate and Deploy
+
+**Evaluate Checkpoints:**
+```bash
+# Find best checkpoint and test accuracy
+python evaluate_checkpoints.py
+```
+
+**Upload to HuggingFace:**
+```bash
+# Upload trained model to HF Hub
+python upload_to_hf.py \
+    --username YOUR_HF_USERNAME \
+    --repo-name qwen-enhanced-typo-fixer \
+    --model-path models/qwen-enhanced-typo-fixer
+```
+
+**Test Deployed Model:**
+```bash
+# Test uploaded model from HF Hub
+python -c "
+from transformers import AutoTokenizer, AutoModelForCausalLM
+model_name = 'YOUR_USERNAME/qwen-enhanced-typo-fixer'
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
+print('✅ Model loaded successfully from HuggingFace!')
+"
 ```
 
 ## 📂 Repository Structure
 
 ```
-train-typo-fixer/
-├── src/
-│   └── realistic_data_generation.py       # High-quality dataset generation
-├── scripts/
-│   ├── training/
-│   │   ├── train_rtx5090.py               # Anti-overfitting training script
-│   │   ├── setup_rtx5090.sh               # Environment setup
-│   │   └── validate_dataset.py            # Dataset quality validation
-│   └── testing/
-│       ├── optimized_accuracy_test.py     # 88.5% accuracy test (RECOMMENDED)
-│       ├── compare_models.py              # Base vs fine-tuned comparison
-│       ├── test_metal_benchmark.py        # macOS Metal GPU benchmark
-│       └── test_conservative_inference.py # Basic inference testing
-├── data/
-│   └── enhanced_training_full.jsonl       # Training dataset
-├── models/                                # Trained models and ANE conversions
-├── anemll/                               # Apple Neural Engine conversion toolkit
-├── demo.py                               # Interactive demonstration script
-├── README.md                             # This file
-└── CLAUDE.md                             # Project documentation
+TypoFixerTraining/
+├── Enhanced Training Pipeline:
+│   ├── generate_enhanced_qwen_dataset.py     # T5-improved dataset generation
+│   ├── train_enhanced_qwen.py                # Main training script
+│   ├── train_single_gpu.py                   # Single GPU training (recommended)
+│   ├── train_dual_gpu.py                     # Dual GPU distributed training
+│   ├── evaluate_checkpoints.py               # Checkpoint evaluation & selection
+│   └── upload_to_hf.py                       # HuggingFace model upload
+│
+├── Advanced Data Generation (T5 Improvements):
+│   ├── scripts/advanced_training_data_generator.py  # Advanced error patterns
+│   ├── scripts/error_pattern_library.py             # Sophisticated error types
+│   ├── scripts/source_text_diversifier.py           # Multi-domain text collection
+│   └── scripts/quality_validator.py                 # Data quality validation
+│
+├── Setup & Configuration:
+│   ├── setup_safe.sh                         # Safe environment setup
+│   ├── training_config.json                  # Training hyperparameters
+│   ├── requirements.txt                      # Minimal dependencies
+│   └── RTX5090_TRAINING_GUIDE.md            # Complete training guide
+│
+├── Legacy & T5 Research:
+│   ├── src/realistic_data_generation.py      # Original data generation
+│   ├── t5/                                   # T5 model experiments
+│   ├── qwen/                                 # Original Qwen implementation
+│   └── anemll/                               # Apple Neural Engine toolkit
+│
+└── Documentation:
+    ├── README.md                             # This file (updated)
+    └── CLAUDE.md                             # Project evolution log
 ```
 
 ### Key Scripts:
-- **`demo.py`** - Interactive demonstration of basic vs optimized approaches
-- **`scripts/testing/optimized_accuracy_test.py`** - Test the 88.5% accuracy approach (recommended)
-- **`scripts/testing/compare_models.py`** - Compare fine-tuned vs base model performance  
-- **`scripts/testing/test_metal_benchmark.py`** - macOS performance benchmarking  
-- **`scripts/training/train_rtx5090.py`** - Anti-overfitting training pipeline
+- **`generate_enhanced_qwen_dataset.py`** - Generate T5-improved training data
+- **`train_single_gpu.py`** - Stable single GPU training (recommended)
+- **`evaluate_checkpoints.py`** - Find best checkpoint automatically
+- **`upload_to_hf.py`** - Deploy trained model to HuggingFace
+- **`setup_safe.sh`** - Safe setup for preconfigured GPU machines
 
 ## 🧪 Run on Apple Neural Engine (CoreML ANE-flex)
 
