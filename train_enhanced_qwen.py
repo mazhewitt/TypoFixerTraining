@@ -290,11 +290,15 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    # Check if we're in distributed mode
+    is_distributed = int(os.environ.get('WORLD_SIZE', 1)) > 1
+
     model = AutoModelForCausalLM.from_pretrained(
         config.model_name,
         torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32,
         trust_remote_code=True,
-        device_map="auto" if torch.cuda.is_available() else None
+        # Don't use device_map in distributed training
+        device_map=None if is_distributed else ("auto" if torch.cuda.is_available() else None)
     )
 
     # Resize token embeddings if needed
