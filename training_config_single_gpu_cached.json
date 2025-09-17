@@ -3,9 +3,9 @@
   "train_file": "data/enhanced_qwen_training.jsonl",
   "output_dir": "models/qwen-base-typo-fixer-cached",
   "num_train_epochs": 4,
-  "per_device_train_batch_size": 8,
-  "per_device_eval_batch_size": 4,
-  "gradient_accumulation_steps": 4,
+  "per_device_train_batch_size": 4,
+  "per_device_eval_batch_size": 2,
+  "gradient_accumulation_steps": 8,
   "learning_rate": 5e-5,
   "weight_decay": 0.01,
   "warmup_ratio": 0.1,
@@ -24,5 +24,6 @@
   "early_stopping_patience": 5,
   "early_stopping_threshold": 0.001,
   "use_cached_tokens": true,
-  "cached_tokens_dir": "data/tokenized_cache"
+  "cached_tokens_dir": "data/tokenized_cache",
+  "gradient_checkpointing": true
 }
