@@ -306,7 +306,7 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
 
     model = AutoModelForCausalLM.from_pretrained(
         config.model_name,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,  # Use FP16 instead of BFloat16
+        torch_dtype=torch.float32,  # Use FP32 for stability (RTX5090 has plenty of VRAM)
         trust_remote_code=True,
         # Don't use device_map in distributed training
         device_map=None if is_distributed else ("auto" if torch.cuda.is_available() else None)
