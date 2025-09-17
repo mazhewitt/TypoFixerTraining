@@ -390,11 +390,11 @@ class SourceTextDiversifier:
         print(f"🎯 Collecting {total_target:,} diverse sentences across multiple domains")
         print("=" * 60)
         
-        # Data sources with allocation
+        # Data sources with allocation (updated for availability)
         sources = [
-            ("wikitext", 0.4),      # 40% - Educational/general content
-            ("bookcorpus", 0.3),    # 30% - Creative/narrative content  
-            ("openwebtext", 0.3),   # 30% - Web content (diverse)
+            ("wikitext", 0.6),      # 60% - Educational/general content (increased since others may fail)
+            ("cc_news", 0.2),       # 20% - News content (more available)
+            ("xsum", 0.2),          # 20% - Summary/article content
         ]
         
         all_sentences_with_domains = []

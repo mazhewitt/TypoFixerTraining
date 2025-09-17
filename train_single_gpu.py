@@ -30,8 +30,12 @@ def main():
     # Setup single GPU
     gpu_count = setup_single_gpu()
 
-    # Load training configuration
-    with open('training_config.json', 'r') as f:
+    # Load training configuration for single GPU
+    config_file = 'training_config_single_gpu.json'
+    if not os.path.exists(config_file):
+        config_file = 'training_config.json'  # Fallback to original
+
+    with open(config_file, 'r') as f:
         config_dict = json.load(f)
 
     # Adjust for single GPU - increase batch size to compensate
