@@ -45,8 +45,8 @@ class QwenTrainingConfig:
     eval_split: float = 0.1  # 10% for evaluation
 
     # Training hyperparameters
-    output_dir: str = "models/qwen-enhanced-typo-fixer"
-    num_train_epochs: int = 3
+    output_dir: str = "models/qwen-base-typo-fixer"
+    num_train_epochs: int = 4
     per_device_train_batch_size: int = 8
     per_device_eval_batch_size: int = 8
     gradient_accumulation_steps: int = 4
@@ -72,7 +72,7 @@ class QwenTrainingConfig:
 
     # Wandb logging
     report_to: str = "wandb"
-    run_name: str = "qwen-enhanced-typo-fixer"
+    run_name: str = "qwen-base-typo-fixer-4epochs"
 
     # Resume training
     resume_from_checkpoint: Optional[str] = None
@@ -447,7 +447,15 @@ def main():
         print(f"📄 Loading config from: {args.config_file}")
         with open(args.config_file, 'r') as f:
             config_dict = json.load(f)
-        config = QwenTrainingConfig(**config_dict)
+        print(f"🔍 Config dict model_name: {config_dict.get('model_name')}")
+        print(f"🔍 Config dict output_dir: {config_dict.get('output_dir')}")
+        try:
+            config = QwenTrainingConfig(**config_dict)
+            print(f"🔍 Final config model_name: {config.model_name}")
+            print(f"🔍 Final config output_dir: {config.output_dir}")
+        except Exception as e:
+            print(f"❌ Error creating config: {e}")
+            config = QwenTrainingConfig()
     else:
         print("⚠️  Using default config")
         config = QwenTrainingConfig()
