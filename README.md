@@ -19,7 +19,7 @@ For the complete end-to-end training experience:
 
 ```bash
 # 1. Setup
-git clone https://github.com/yourusername/TypoFixerTraining.git
+git clone https://github.com/mazhewitt/TypoFixerTraining.git
 cd TypoFixerTraining
 ./setup_safe.sh
 

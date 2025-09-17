@@ -26,7 +26,7 @@ from transformers import (
     EarlyStoppingCallback
 )
 from transformers.trainer_utils import get_last_checkpoint
-import wandb
+# import wandb  # Disabled
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -285,12 +285,12 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
     print()
 
     # Initialize wandb if configured
-    if config.report_to == "wandb":
-        wandb.init(
-            project="qwen-typo-fixer",
-            name=config.run_name,
-            config=config.__dict__
-        )
+    # if config.report_to == "wandb":
+    #     wandb.init(
+    #         project="qwen-typo-fixer",
+    #         name=config.run_name,
+    #         config=config.__dict__
+    #     )
 
     # Load tokenizer and model
     logger.info(f"Loading model and tokenizer: {config.model_name}")
@@ -423,8 +423,8 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
     print(f"📁 Model saved to: {config.output_dir}")
     print(f"📊 Stats saved to: {stats_file}")
 
-    if config.report_to == "wandb":
-        wandb.finish()
+    # if config.report_to == "wandb":
+    #     wandb.finish()
 
 def main():
     import argparse

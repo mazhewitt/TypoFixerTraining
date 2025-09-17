@@ -19,7 +19,7 @@
   "dataloader_pin_memory": false,
   "eval_accumulation_steps": 1,
   "group_by_length": true,
-  "report_to": "wandb",
+  "report_to": "none",
   "run_name": "qwen-base-dual-gpu-test",
   "early_stopping_patience": 5,
   "early_stopping_threshold": 0.001
