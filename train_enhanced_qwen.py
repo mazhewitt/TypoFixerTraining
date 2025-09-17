@@ -338,7 +338,7 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         weight_decay=config.weight_decay,
         warmup_ratio=config.warmup_ratio,
         logging_steps=config.logging_steps,
-        evaluation_strategy=config.eval_strategy,
+        eval_strategy=config.eval_strategy,
         eval_steps=config.eval_steps,
         save_steps=config.save_steps,
         save_total_limit=config.save_total_limit,
