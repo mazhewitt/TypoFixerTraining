@@ -33,14 +33,16 @@ def main():
     # Setup GPUs
     gpu_count = setup_dual_gpu()
 
-    # Load training configuration
-    with open('training_config.json', 'r') as f:
+    # Load training configuration for dual GPU
+    config_file = 'training_config_dual_gpu_test.json'
+    with open(config_file, 'r') as f:
         config_dict = json.load(f)
 
-    # Adjust batch size for dual GPU
-    config_dict['per_device_train_batch_size'] = 16  # Per GPU
-    config_dict['per_device_eval_batch_size'] = 16   # Per GPU
-    # Total effective batch size = 16 * 2 GPUs * 2 grad_accum = 64
+    # Use conservative batch sizes for dual GPU with Qwen3-0.6B-Base
+    config_dict['per_device_train_batch_size'] = 12  # Per GPU - conservative
+    config_dict['per_device_eval_batch_size'] = 6    # Per GPU - conservative
+    config_dict['gradient_accumulation_steps'] = 2   # To maintain effective batch size
+    # Total effective batch size = 12 * 2 GPUs * 2 grad_accum = 48
 
     config = QwenTrainingConfig(**config_dict)
 
