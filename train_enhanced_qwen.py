@@ -367,6 +367,8 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         report_to=config.report_to,
         run_name=config.run_name,
         seed=42,
+        dataloader_pin_memory=getattr(config, 'dataloader_pin_memory', False),
+        eval_accumulation_steps=getattr(config, 'eval_accumulation_steps', 1),
     )
 
     # Initialize trainer
@@ -377,7 +379,7 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         eval_dataset=tokenized_dataset.get('eval'),
         data_collator=data_collator,
         tokenizer=tokenizer,
-        compute_metrics=compute_metrics if 'eval' in tokenized_dataset else None,
+        compute_metrics=None,  # Disable compute_metrics to avoid OOM during eval
         callbacks=[
             EarlyStoppingCallback(
                 early_stopping_patience=config.early_stopping_patience,
