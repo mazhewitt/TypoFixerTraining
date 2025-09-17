@@ -23,5 +23,7 @@
   "report_to": "none",
   "run_name": "qwen-base-typo-fixer-4epochs",
   "early_stopping_patience": 5,
-  "early_stopping_threshold": 0.001
+  "early_stopping_threshold": 0.001,
+  "use_cached_tokens": true,
+  "cached_tokens_dir": "data/tokenized_cache"
 }
