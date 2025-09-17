@@ -1,0 +1,5 @@
+Collecting datasets
+  Downloading datasets-4.1.0-py3-none-any.whl.metadata (18 kB)
+Downloading datasets-4.1.0-py3-none-any.whl (503 kB)
+Installing collected packages: datasets
+Successfully installed datasets-4.1.0

@@ -1,0 +1,6 @@
+Collecting transformers
+  Downloading transformers-4.56.1-py3-none-any.whl.metadata (42 kB)
+Downloading transformers-4.56.1-py3-none-any.whl (11.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 11.6/11.6 MB 116.1 MB/s eta 0:00:00
+Installing collected packages: transformers
+Successfully installed transformers-4.56.1

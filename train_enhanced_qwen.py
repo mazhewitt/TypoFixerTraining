@@ -9,6 +9,7 @@ Includes advanced data generation, punctuation balancing, and multi-domain train
 import os
 import json
 import torch
+import torch.distributed as dist
 import logging
 
 # Fix tokenizer parallelism warning
@@ -43,6 +44,10 @@ class QwenTrainingConfig:
     # Training data
     train_file: str = "data/enhanced_qwen_training.jsonl"
     eval_split: float = 0.1  # 10% for evaluation
+
+    # Cached tokens configuration
+    use_cached_tokens: bool = False
+    cached_tokens_dir: str = "data/tokenized_cache"
 
     # Training hyperparameters
     output_dir: str = "models/qwen-base-typo-fixer"
@@ -277,12 +282,36 @@ def print_dataset_analysis(stats: Dict):
 def train_enhanced_qwen(config: QwenTrainingConfig):
     """Train Qwen with the enhanced dataset."""
 
-    print("🚀 Starting Enhanced Qwen Training")
-    print("=" * 50)
-    print(f"Model: {config.model_name}")
-    print(f"Dataset: {config.train_file}")
-    print(f"Output: {config.output_dir}")
-    print()
+    # Initialize distributed training if using torchrun
+    is_distributed = int(os.environ.get('WORLD_SIZE', 1)) > 1
+    local_rank = int(os.environ.get('LOCAL_RANK', -1))
+
+    if is_distributed:
+        # Initialize process group
+        if not dist.is_initialized():
+            dist.init_process_group(backend='nccl')
+
+        # Set device for this process
+        torch.cuda.set_device(local_rank)
+        device = torch.device(f'cuda:{local_rank}')
+
+        # Only print on main process
+        if local_rank != 0:
+            logger.setLevel(logging.WARNING)
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        local_rank = -1
+
+    # Print training info only on main process
+    if local_rank <= 0:
+        print("🚀 Starting Enhanced Qwen Training")
+        print("=" * 50)
+        print(f"Model: {config.model_name}")
+        print(f"Dataset: {config.train_file}")
+        print(f"Output: {config.output_dir}")
+        if is_distributed:
+            print(f"Distributed Training: {os.environ.get('WORLD_SIZE', 1)} GPUs")
+        print()
 
     # Initialize wandb if configured
     # if config.report_to == "wandb":
@@ -305,38 +334,69 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    # Check if we're in distributed mode
-    is_distributed = int(os.environ.get('WORLD_SIZE', 1)) > 1
-
+    # Load model - no device_map for distributed training
     model = AutoModelForCausalLM.from_pretrained(
         config.model_name,
         torch_dtype=torch.float32,  # Use FP32 for stability (RTX5090 has plenty of VRAM)
         trust_remote_code=True,
-        # Don't use device_map in distributed training
-        device_map=None if is_distributed else ("auto" if torch.cuda.is_available() else None)
+        device_map=None  # Never use device_map with distributed training
     )
+
+    # Don't move model to device yet - let Trainer/Accelerate handle it for DDP
+    # This prevents CUDA illegal memory access errors during DDP initialization
 
     # Resize token embeddings if needed
     model.resize_token_embeddings(len(tokenizer))
 
     # Load and preprocess dataset
-    logger.info("Loading and preprocessing dataset...")
-    dataset = load_enhanced_dataset(config.train_file, config.eval_split)
+    if config.use_cached_tokens:
+        # Load pre-tokenized dataset from cache
+        logger.info(f"Loading cached tokenized dataset from {config.cached_tokens_dir}")
+        from datasets import load_from_disk
 
-    # Analyze dataset
-    train_stats = analyze_dataset_metadata(dataset['train'])
-    print_dataset_analysis(train_stats)
+        cached_dataset_path = Path(config.cached_tokens_dir) / "tokenized_dataset"
+        if not cached_dataset_path.exists():
+            raise FileNotFoundError(
+                f"Cached dataset not found at {cached_dataset_path}. "
+                f"Please run: python pretokenize_dataset.py --output-dir {config.cached_tokens_dir}"
+            )
 
-    # Tokenize dataset
-    def tokenize_function(examples):
-        return preprocess_function(examples, tokenizer, config.model_max_length)
+        tokenized_dataset = load_from_disk(str(cached_dataset_path))
 
-    tokenized_dataset = dataset.map(
-        tokenize_function,
-        batched=True,
-        remove_columns=dataset['train'].column_names,
-        desc="Tokenizing dataset"
-    )
+        # Load metadata for stats
+        metadata_path = Path(config.cached_tokens_dir) / "metadata.json"
+        if metadata_path.exists() and local_rank <= 0:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            print(f"\n📊 Using cached dataset:")
+            print(f"  Train samples: {metadata.get('train_size', 'Unknown'):,}")
+            print(f"  Eval samples: {metadata.get('eval_size', 'Unknown'):,}")
+            print(f"  Max length: {metadata.get('max_length', 'Unknown')}")
+            print(f"  Model: {metadata.get('model_name', 'Unknown')}\n")
+
+        train_stats = {}  # No need to analyze, already done during pre-tokenization
+    else:
+        # Original tokenization flow
+        logger.info("Loading and preprocessing dataset...")
+        dataset = load_enhanced_dataset(config.train_file, config.eval_split)
+
+        # Analyze dataset - only on main process
+        if local_rank <= 0:
+            train_stats = analyze_dataset_metadata(dataset['train'])
+            print_dataset_analysis(train_stats)
+        else:
+            train_stats = {}
+
+        # Tokenize dataset
+        def tokenize_function(examples):
+            return preprocess_function(examples, tokenizer, config.model_max_length)
+
+        tokenized_dataset = dataset.map(
+            tokenize_function,
+            batched=True,
+            remove_columns=dataset['train'].column_names,
+            desc="Tokenizing dataset"
+        )
 
     # Data collator with proper padding handling
     data_collator = DataCollatorForLanguageModeling(
@@ -346,7 +406,7 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         return_tensors="pt"
     )
 
-    # Training arguments
+    # Training arguments - with distributed training support
     training_args = TrainingArguments(
         output_dir=config.output_dir,
         overwrite_output_dir=True,
@@ -373,6 +433,14 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         seed=42,
         dataloader_pin_memory=getattr(config, 'dataloader_pin_memory', False),
         eval_accumulation_steps=getattr(config, 'eval_accumulation_steps', 1),
+        # Distributed training settings
+        local_rank=local_rank,
+        ddp_find_unused_parameters=True,  # Changed to True for better compatibility
+        ddp_backend='nccl' if is_distributed else None,
+        remove_unused_columns=False,  # Prevent column removal issues
+        # Additional settings for stability
+        gradient_checkpointing=False,
+        fsdp="" if not is_distributed else "",  # Disable FSDP
     )
 
     # Initialize trainer
@@ -382,7 +450,7 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
         train_dataset=tokenized_dataset['train'],
         eval_dataset=tokenized_dataset.get('eval'),
         data_collator=data_collator,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,  # Use processing_class instead of deprecated tokenizer
         compute_metrics=None,  # Disable compute_metrics to avoid OOM during eval
         callbacks=[
             EarlyStoppingCallback(
@@ -405,26 +473,31 @@ def train_enhanced_qwen(config: QwenTrainingConfig):
     logger.info("Starting training...")
     trainer.train(resume_from_checkpoint=checkpoint)
 
-    # Save the final model
-    logger.info("Saving final model...")
-    trainer.save_model()
-    tokenizer.save_pretrained(config.output_dir)
+    # Save the final model - only on main process
+    if local_rank <= 0:
+        logger.info("Saving final model...")
+        trainer.save_model()
+        tokenizer.save_pretrained(config.output_dir)
 
-    # Save training statistics
-    stats_file = Path(config.output_dir) / "training_stats.json"
-    with open(stats_file, 'w') as f:
-        json.dump({
-            'config': config.__dict__,
-            'dataset_stats': train_stats,
-            'final_metrics': trainer.state.log_history[-1] if trainer.state.log_history else {}
-        }, f, indent=2)
+        # Save training statistics
+        stats_file = Path(config.output_dir) / "training_stats.json"
+        with open(stats_file, 'w') as f:
+            json.dump({
+                'config': config.__dict__,
+                'dataset_stats': train_stats,
+                'final_metrics': trainer.state.log_history[-1] if trainer.state.log_history else {}
+            }, f, indent=2)
 
-    print(f"\n✅ Training complete!")
-    print(f"📁 Model saved to: {config.output_dir}")
-    print(f"📊 Stats saved to: {stats_file}")
+        print(f"\n✅ Training complete!")
+        print(f"📁 Model saved to: {config.output_dir}")
+        print(f"📊 Stats saved to: {stats_file}")
 
     # if config.report_to == "wandb":
     #     wandb.finish()
+
+    # Clean up distributed training
+    if is_distributed:
+        dist.destroy_process_group()
 
 def main():
     import argparse
@@ -439,6 +512,8 @@ def main():
     parser.add_argument('--learning-rate', type=float, default=None)
     parser.add_argument('--resume-from-checkpoint', type=str, help='Resume training from checkpoint')
     parser.add_argument('--no-wandb', action='store_true', help='Disable wandb logging')
+    parser.add_argument('--use-cached-tokens', action='store_true', help='Use pre-tokenized cached dataset')
+    parser.add_argument('--cached-tokens-dir', type=str, default='data/tokenized_cache', help='Directory with cached tokens')
 
     args = parser.parse_args()
 
@@ -469,6 +544,10 @@ def main():
         config.resume_from_checkpoint = args.resume_from_checkpoint
     if args.no_wandb:
         config.report_to = "none"
+    if args.use_cached_tokens:
+        config.use_cached_tokens = True
+    if args.cached_tokens_dir:
+        config.cached_tokens_dir = args.cached_tokens_dir
 
     # Ensure output directory exists
     os.makedirs(config.output_dir, exist_ok=True)
